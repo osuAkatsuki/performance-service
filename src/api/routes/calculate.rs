@@ -116,7 +116,9 @@ async fn calculate_play(
         let beatmap_path =
             Path::new(&ctx.config.beatmaps_path).join(format!("{}.osu", request.beatmap_id));
 
-        let result = if request.mods & RX > 0 || request.mods & AP > 0 {
+        let result = if (request.mods & RX > 0 || request.mods & AP > 0)
+            && vec![0, 1].contains(&request.mode)
+        {
             calculate_oppai_pp(beatmap_path, &request).await
         } else {
             calculate_bancho_pp(beatmap_path, &request).await

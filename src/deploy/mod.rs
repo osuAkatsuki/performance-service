@@ -134,7 +134,6 @@ async fn recalculate_score(
     beatmap_path: PathBuf,
     ctx: &Arc<Context>,
     recalc_ctx: &Arc<Mutex<RecalculateContext>>,
-    tx: &mut Arc<sqlx::Transaction<'_, sqlx::MySql>>,
 ) -> anyhow::Result<()> {
     let request = CalculateRequest {
         beatmap_id: score.beatmap_id,
@@ -145,11 +144,12 @@ async fn recalculate_score(
         miss_count: score.count_misses,
     };
 
-    let response = if score.mods & RX > 0 || score.mods & AP > 0 {
-        calculate_oppai_pp(beatmap_path, &request).await
-    } else {
-        calculate_bancho_pp(beatmap_path, &request, recalc_ctx).await
-    };
+    let response =
+        if (score.mods & RX > 0 || score.mods & AP > 0) && vec![0, 1].contains(&score.play_mode) {
+            calculate_oppai_pp(beatmap_path, &request).await
+        } else {
+            calculate_bancho_pp(beatmap_path, &request, recalc_ctx).await
+        };
 
     let rx = if score.mods & RX > 0 {
         1
@@ -169,7 +169,7 @@ async fn recalculate_score(
     sqlx::query(&format!("UPDATE {} SET pp = ? WHERE id = ?", scores_table))
         .bind(response.pp)
         .bind(score.id)
-        .execute(Arc::get_mut(&mut *tx).unwrap())
+        .execute(&ctx.database)
         .await?;
 
     // cache will only contain it if it's their best score
@@ -235,14 +235,11 @@ async fn recalculate_mode_scores(
     .fetch_all(&ctx.database)
     .await?;
 
-    let tx = ctx.database.begin().await?;
-    let mut tx_arc = Arc::new(tx);
-
     for score in scores {
         let beatmap_path =
             Path::new(&ctx.config.beatmaps_path).join(format!("{}.osu", score.beatmap_id));
 
-        recalculate_score(score, beatmap_path, &ctx, &recalc_ctx, &mut tx_arc).await?;
+        recalculate_score(score, beatmap_path, &ctx, &recalc_ctx).await?;
     }
 
     Ok(())
