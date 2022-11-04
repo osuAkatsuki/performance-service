@@ -39,19 +39,21 @@ async fn calculate_oppai_pp(
     beatmap_path: PathBuf,
     request: &CalculateRequest,
 ) -> CalculateResponse {
-    let mut oppai: &mut Oppai = &mut Oppai::new(&beatmap_path).unwrap();
+    let oppai: &mut Oppai = &mut Oppai::new(&beatmap_path).unwrap();
 
-    oppai = oppai
+    let final_oppai = match oppai
         .mods(OppaiMods::from_bits_truncate(request.mods))
         .combo(Combo::NonFC {
             max_combo: request.max_combo as u32,
             misses: request.miss_count as u32,
-        })
-        .unwrap()
-        .accuracy(request.accuracy)
-        .unwrap();
+        }) {
+        Ok(oppai) => oppai,
+        Err(_) => oppai.combo(Combo::FC(0)).unwrap(),
+    }
+    .accuracy(request.accuracy)
+    .unwrap();
 
-    let (mut pp, mut stars) = oppai.run();
+    let (mut pp, mut stars) = final_oppai.run();
     pp = round(pp, 2);
     stars = round(stars, 2);
 
@@ -69,7 +71,7 @@ async fn calculate_oppai_pp(
 async fn calculate_bancho_pp(
     beatmap_path: PathBuf,
     request: &CalculateRequest,
-    recalc_ctx: Arc<Mutex<RecalculateContext>>,
+    recalc_ctx: &Arc<Mutex<RecalculateContext>>,
 ) -> CalculateResponse {
     let mut recalc_mutex = recalc_ctx.lock().await;
 
@@ -130,9 +132,9 @@ async fn calculate_bancho_pp(
 async fn recalculate_score(
     score: RippleScore,
     beatmap_path: PathBuf,
-    ctx: Arc<Context>,
-    recalc_ctx: Arc<Mutex<RecalculateContext>>,
-    mut tx: Arc<sqlx::Transaction<'_, sqlx::MySql>>,
+    ctx: &Arc<Context>,
+    recalc_ctx: &Arc<Mutex<RecalculateContext>>,
+    tx: &mut Arc<sqlx::Transaction<'_, sqlx::MySql>>,
 ) -> anyhow::Result<()> {
     let request = CalculateRequest {
         beatmap_id: score.beatmap_id,
@@ -167,7 +169,7 @@ async fn recalculate_score(
     sqlx::query(&format!("UPDATE {} SET pp = ? WHERE id = ?", scores_table))
         .bind(response.pp)
         .bind(score.id)
-        .execute(Arc::get_mut(&mut tx).unwrap())
+        .execute(Arc::get_mut(&mut *tx).unwrap())
         .await?;
 
     // cache will only contain it if it's their best score
@@ -190,10 +192,11 @@ async fn recalculate_score(
     }
 
     log::info!(
-        "Recalculated score ID {} | {:.2} -> {:.2}",
+        "Recalculated score ID {} (mode: {}) | {} -> {}",
         score.id,
+        score.play_mode,
         score.pp,
-        response.pp
+        response.pp,
     );
 
     Ok(())
@@ -222,8 +225,8 @@ async fn recalculate_mode_scores(
                 beatmaps b 
                 USING(beatmap_md5) 
             WHERE 
-                AND completed IN (2, 3)
-                AND play_mode = ?
+                completed IN (2, 3) 
+                AND play_mode = ? 
             ORDER BY pp DESC",
             scores_table
         )
@@ -233,24 +236,15 @@ async fn recalculate_mode_scores(
     .await?;
 
     let tx = ctx.database.begin().await?;
-    let tx_arc = Arc::new(tx);
+    let mut tx_arc = Arc::new(tx);
 
-    let mut score_futures = Vec::new();
     for score in scores {
         let beatmap_path =
-            Path::new(&ctx.config.beatmaps_path).join(format!("{}.osu", score.beatmap_md5));
+            Path::new(&ctx.config.beatmaps_path).join(format!("{}.osu", score.beatmap_id));
 
-        let future = recalculate_score(
-            score,
-            beatmap_path,
-            ctx.clone(),
-            recalc_ctx.clone(),
-            tx_arc.clone(),
-        );
-        score_futures.push(future);
+        recalculate_score(score, beatmap_path, &ctx, &recalc_ctx, &mut tx_arc).await?;
     }
 
-    futures::future::try_join_all(score_futures.into_iter().map(tokio::spawn)).await?;
     Ok(())
 }
 
@@ -271,7 +265,7 @@ async fn recalculate_user(
     user_id: i32,
     mode: i32,
     rx: i32,
-    ctx: Arc<Context>,
+    ctx: &Arc<Context>,
 ) -> anyhow::Result<()> {
     let scores_table = match rx {
         0 => "scores",
@@ -427,13 +421,10 @@ async fn recalculate_mode_users(mode: i32, rx: i32, ctx: Arc<Context>) -> anyhow
         .fetch_all(&ctx.database)
         .await?;
 
-    let mut user_futures = Vec::new();
     for (user_id,) in user_ids {
-        let future = recalculate_user(user_id, mode, rx, ctx.clone());
-        user_futures.push(future);
+        recalculate_user(user_id, mode, rx, &ctx).await?;
     }
 
-    futures::future::try_join_all(user_futures.into_iter().map(tokio::spawn)).await?;
     Ok(())
 }
 
@@ -442,9 +433,6 @@ struct RecalculateContext {
 }
 
 pub async fn serve(context: Context) -> anyhow::Result<()> {
-    let mut score_futures = Vec::new();
-    let mut user_futures = Vec::new();
-
     let recalculate_context = Arc::new(Mutex::new(RecalculateContext {
         beatmaps: HashMap::new(),
     }));
@@ -455,37 +443,29 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
         let rx = vec![0, 1, 2].contains(&mode);
         let ap = mode == 0;
 
-        let rx = if rx {
-            1
-        } else if ap {
-            2
+        if rx || ap {
+            for rx in vec![0, 1, 2] {
+                recalculate_mode_scores(mode, rx, context_arc.clone(), recalculate_context.clone())
+                    .await?;
+            }
         } else {
-            0
-        };
-
-        let recalculate_future =
-            recalculate_mode_scores(mode, rx, context_arc.clone(), recalculate_context.clone());
-
-        score_futures.push(recalculate_future);
+            recalculate_mode_scores(mode, 0, context_arc.clone(), recalculate_context.clone())
+                .await?;
+        }
     }
-    futures::future::try_join_all(score_futures.into_iter().map(tokio::spawn)).await?;
 
     for mode in vec![0, 1, 2, 3] {
         let rx = vec![0, 1, 2].contains(&mode);
         let ap = mode == 0;
 
-        let rx = if rx {
-            1
-        } else if ap {
-            2
+        if rx || ap {
+            for rx in vec![0, 1, 2] {
+                recalculate_mode_users(mode, rx, context_arc.clone()).await?;
+            }
         } else {
-            0
-        };
-
-        let recalculate_future = recalculate_mode_users(mode, rx, context_arc.clone());
-        user_futures.push(recalculate_future);
+            recalculate_mode_users(mode, 0, context_arc.clone()).await?;
+        }
     }
-    futures::future::try_join_all(user_futures.into_iter().map(tokio::spawn)).await?;
 
     Ok(())
 }
