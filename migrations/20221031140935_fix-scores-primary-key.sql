@@ -1,0 +1,1 @@
+alter table rework_scores drop primary key, add primary key (score_id, rework_id);

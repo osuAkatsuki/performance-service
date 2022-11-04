@@ -1,0 +1,1 @@
+alter table reworks add column updated_at datetime not null default current_timestamp;

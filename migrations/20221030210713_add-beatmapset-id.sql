@@ -1,0 +1,1 @@
+alter table rework_scores add column beatmapset_id int not null;

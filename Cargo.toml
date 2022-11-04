@@ -1,0 +1,44 @@
+[package]
+name = "performance-service"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+authors = ["tsunyoku <tsunyoku@gmail.com>"]
+publish = false
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tokio = { version = "1.0", features = ["full"] }
+dotenv = "0.15.0"
+clap = { version = "3.0.0-beta.5", features = ["derive", "env"] }
+serde = { version = "1.0.130", features = ["derive"] }
+serde_json = "1.0.87"
+env_logger = "0.9.0"
+anyhow = "1.0.48"
+log = "0.4.14"
+tower = "0.4.11"
+tower-http = { version = "0.2.0", features = ["trace"] }
+axum = { version = "0.3.4", features = ["tower-log"] }
+chrono = { version = "0.4.22", features = ["serde"] }
+sqlx = { version = "0.6.2", features = ["runtime-tokio-native-tls", "mysql", "chrono"] }
+lapin = "2.1.1"
+deadpool = { version = "0.9.5", features = ["rt_tokio_1"] }
+deadpool-lapin = "0.10.0"
+rkyv = { version = "0.7", features = ["validation"] }
+bytecheck = "0.6.9"
+tokio-executor-trait = "2.1.0"
+tokio-stream = "0.1.11"
+bancho-rework = { package = "rosu-pp", git = "https://github.com/MaxOhn/rosu-pp", features = ["async_tokio"] }
+redis = { version = "0.22.0", features = ["tokio-comp"] }
+bcrypt = "0.13.0"
+uuid = { version = "1.2.1", features = ["v4"] }
+futures = "0.3.17"
+strsim = "0.10.0"
+akatsuki-pp-rs = { package = "rosu-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", features = ["async_tokio"] }
+oppai-rs = { git = "https://github.com/osuAkatsuki/oppai-rs", rev = "cd426a55df501a17b2895b3f1ddc1ee71bf4233e" }
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+panic = "abort"

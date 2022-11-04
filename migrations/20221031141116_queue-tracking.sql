@@ -1,0 +1,1 @@
+alter table rework_queue add column processed_at datetime null;
