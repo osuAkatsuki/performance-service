@@ -4,11 +4,13 @@ use oppai_rs::{Combo, Mods as OppaiMods, Oppai};
 use redis::AsyncCommands;
 use std::{
     collections::HashMap,
+    io::Cursor,
     path::{Path, PathBuf},
     sync::Arc,
     time::SystemTime,
 };
 
+use tokio::fs::File;
 use tokio::sync::Mutex;
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -239,6 +241,16 @@ async fn recalculate_mode_scores(
         let beatmap_path =
             Path::new(&ctx.config.beatmaps_path).join(format!("{}.osu", score.beatmap_id));
 
+        if !beatmap_path.exists() {
+            let response = reqwest::get(&format!("https://old.ppy.sh/osu/{}", score.beatmap_id))
+                .await?
+                .error_for_status()?;
+
+            let mut file = File::create(&beatmap_path).await?;
+            let mut content = Cursor::new(response.bytes().await?);
+            tokio::io::copy(&mut content, &mut file).await?;
+        }
+
         recalculate_score(score, beatmap_path, &ctx, &recalc_ctx).await?;
     }
 
@@ -436,7 +448,8 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
 
     let context_arc = Arc::new(context);
 
-    for mode in vec![0, 1, 2, 3] {
+    for mode in vec![1, 2, 3] {
+        //for mode in vec![0, 1, 2, 3] {
         let rx = vec![0, 1, 2].contains(&mode);
         let ap = mode == 0;
 

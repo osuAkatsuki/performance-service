@@ -37,6 +37,7 @@ futures = "0.3.17"
 strsim = "0.10.0"
 akatsuki-pp-rs = { package = "rosu-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", features = ["async_tokio"] }
 oppai-rs = { git = "https://github.com/osuAkatsuki/oppai-rs", rev = "cd426a55df501a17b2895b3f1ddc1ee71bf4233e" }
+reqwest = "0.11"
 
 [profile.release]
 lto = "fat"

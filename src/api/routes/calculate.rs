@@ -2,8 +2,10 @@ use crate::context::Context;
 use akatsuki_pp_rs::{Beatmap, BeatmapExt, GameMode};
 use axum::{extract::Extension, routing::post, Json, Router};
 use oppai_rs::{Combo, Mods as OppaiMods, Oppai};
+use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use tokio::fs::File;
 
 pub fn router() -> Router {
     Router::new().route("/api/v1/calculate", post(calculate_play))
@@ -33,20 +35,21 @@ fn round(x: f32, decimals: u32) -> f32 {
 async fn calculate_oppai_pp(
     beatmap_path: PathBuf,
     request: &CalculateRequest,
-) -> CalculateResponse {
-    let mut oppai: &mut Oppai = &mut Oppai::new(&beatmap_path).unwrap();
+) -> anyhow::Result<CalculateResponse> {
+    let oppai: &mut Oppai = &mut Oppai::new(&beatmap_path)?;
 
-    oppai = oppai
+    let final_oppai = match oppai
         .mods(OppaiMods::from_bits_truncate(request.mods))
         .combo(Combo::NonFC {
             max_combo: request.max_combo as u32,
             misses: request.miss_count as u32,
-        })
-        .unwrap()
-        .accuracy(request.accuracy)
-        .unwrap();
+        }) {
+        Ok(oppai) => oppai,
+        Err(_) => oppai.combo(Combo::FC(0))?,
+    }
+    .accuracy(request.accuracy)?;
 
-    let (mut pp, mut stars) = oppai.run();
+    let (mut pp, mut stars) = final_oppai.run();
     pp = round(pp, 2);
     stars = round(stars, 2);
 
@@ -58,7 +61,7 @@ async fn calculate_oppai_pp(
         stars = 0.0;
     }
 
-    CalculateResponse { stars, pp }
+    Ok(CalculateResponse { stars, pp })
 }
 
 async fn calculate_bancho_pp(
@@ -106,6 +109,18 @@ async fn calculate_bancho_pp(
 const RX: i32 = 1 << 7;
 const AP: i32 = 1 << 13;
 
+async fn download_beatmap(beatmap_path: PathBuf, request: &CalculateRequest) -> anyhow::Result<()> {
+    let response = reqwest::get(&format!("https://old.ppy.sh/osu/{}", request.beatmap_id))
+        .await?
+        .error_for_status()?;
+
+    let mut file = File::create(&beatmap_path).await?;
+    let mut content = Cursor::new(response.bytes().await?);
+    tokio::io::copy(&mut content, &mut file).await?;
+
+    Ok(())
+}
+
 async fn calculate_play(
     Extension(ctx): Extension<Arc<Context>>,
     Json(requests): Json<Vec<CalculateRequest>>,
@@ -116,10 +131,30 @@ async fn calculate_play(
         let beatmap_path =
             Path::new(&ctx.config.beatmaps_path).join(format!("{}.osu", request.beatmap_id));
 
+        if !beatmap_path.exists() {
+            match download_beatmap(beatmap_path.clone(), &request).await {
+                Ok(_) => {}
+                Err(_) => {
+                    results.push(CalculateResponse {
+                        stars: 0.0,
+                        pp: 0.0,
+                    });
+
+                    continue;
+                }
+            }
+        }
+
         let result = if (request.mods & RX > 0 || request.mods & AP > 0)
             && vec![0, 1].contains(&request.mode)
         {
-            calculate_oppai_pp(beatmap_path, &request).await
+            match calculate_oppai_pp(beatmap_path, &request).await {
+                Ok(result) => result,
+                Err(_) => CalculateResponse {
+                    stars: 0.0,
+                    pp: 0.0,
+                },
+            }
         } else {
             calculate_bancho_pp(beatmap_path, &request).await
         };
