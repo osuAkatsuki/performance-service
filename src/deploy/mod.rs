@@ -40,8 +40,8 @@ const AP: i32 = 1 << 13;
 async fn calculate_oppai_pp(
     beatmap_path: PathBuf,
     request: &CalculateRequest,
-) -> CalculateResponse {
-    let oppai: &mut Oppai = &mut Oppai::new(&beatmap_path).unwrap();
+) -> anyhow::Result<CalculateResponse> {
+    let oppai: &mut Oppai = &mut Oppai::new(&beatmap_path)?;
 
     let final_oppai = match oppai
         .mods(OppaiMods::from_bits_truncate(request.mods))
@@ -50,10 +50,9 @@ async fn calculate_oppai_pp(
             misses: request.miss_count as u32,
         }) {
         Ok(oppai) => oppai,
-        Err(_) => oppai.combo(Combo::FC(0)).unwrap(),
+        Err(_) => oppai.combo(Combo::FC(0))?,
     }
-    .accuracy(request.accuracy)
-    .unwrap();
+    .accuracy(request.accuracy)?;
 
     let (mut pp, mut stars) = final_oppai.run();
     pp = round(pp, 2);
@@ -67,7 +66,7 @@ async fn calculate_oppai_pp(
         stars = 0.0;
     }
 
-    CalculateResponse { stars, pp }
+    Ok(CalculateResponse { stars, pp })
 }
 
 async fn calculate_bancho_pp(
@@ -148,7 +147,16 @@ async fn recalculate_score(
 
     let response =
         if (score.mods & RX > 0 || score.mods & AP > 0) && vec![0, 1].contains(&score.play_mode) {
-            calculate_oppai_pp(beatmap_path, &request).await
+            match calculate_oppai_pp(beatmap_path, &request).await {
+                Ok(response) => response,
+                Err(e) => {
+                    log::warn!("{}", e);
+                    CalculateResponse {
+                        stars: 0.0,
+                        pp: 0.0,
+                    }
+                }
+            }
         } else {
             calculate_bancho_pp(beatmap_path, &request, recalc_ctx).await
         };
