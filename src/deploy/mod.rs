@@ -456,8 +456,7 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
 
     let context_arc = Arc::new(context);
 
-    for mode in vec![1, 2, 3] {
-        //for mode in vec![0, 1, 2, 3] {
+    for mode in vec![0, 1, 2, 3] {
         let rx = vec![0, 1, 2].contains(&mode);
         let ap = mode == 0;
 
