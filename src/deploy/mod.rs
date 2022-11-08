@@ -133,8 +133,8 @@ async fn calculate_bancho_pp(
 async fn recalculate_score(
     score: RippleScore,
     beatmap_path: PathBuf,
-    ctx: &Arc<Context>,
-    recalc_ctx: &Arc<Mutex<RecalculateContext>>,
+    ctx: Arc<Context>,
+    recalc_ctx: Arc<Mutex<RecalculateContext>>,
 ) -> anyhow::Result<()> {
     let request = CalculateRequest {
         beatmap_id: score.beatmap_id,
@@ -158,7 +158,7 @@ async fn recalculate_score(
                 }
             }
         } else {
-            calculate_bancho_pp(beatmap_path, &request, recalc_ctx).await
+            calculate_bancho_pp(beatmap_path, &request, &recalc_ctx).await
         };
 
     let rx = if score.mods & RX > 0 {
@@ -245,12 +245,21 @@ async fn recalculate_mode_scores(
     .fetch_all(&ctx.database)
     .await?;
 
-    for score in scores {
+    for score_chunk in scores.chunks(100).map(|c| c.to_vec()) {
+        let mut futures = Vec::new();
+
+        for score in score_chunk {
         let beatmap_path =
             Path::new(&ctx.config.beatmaps_path).join(format!("{}.osu", score.beatmap_id));
 
         if !beatmap_path.exists() {
-            let response = reqwest::get(&format!("https://old.ppy.sh/osu/{}", score.beatmap_id))
+                log::info!(
+                    "Beatmap {} doesn't exist, fetching from bancho",
+                    score.beatmap_id
+                );
+
+                let response =
+                    reqwest::get(&format!("https://old.ppy.sh/osu/{}", score.beatmap_id))
                 .await?
                 .error_for_status()?;
 
@@ -259,7 +268,16 @@ async fn recalculate_mode_scores(
             tokio::io::copy(&mut content, &mut file).await?;
         }
 
-        recalculate_score(score, beatmap_path, &ctx, &recalc_ctx).await?;
+            let future = tokio::spawn(recalculate_score(
+                score,
+                beatmap_path,
+                ctx.clone(),
+                recalc_ctx.clone(),
+            ));
+            futures.push(future);
+        }
+
+        futures::future::try_join_all(futures).await?;
     }
 
     Ok(())
@@ -282,7 +300,7 @@ async fn recalculate_user(
     user_id: i32,
     mode: i32,
     rx: i32,
-    ctx: &Arc<Context>,
+    ctx: Arc<Context>,
 ) -> anyhow::Result<()> {
     let scores_table = match rx {
         0 => "scores",
@@ -438,8 +456,15 @@ async fn recalculate_mode_users(mode: i32, rx: i32, ctx: Arc<Context>) -> anyhow
         .fetch_all(&ctx.database)
         .await?;
 
-    for (user_id,) in user_ids {
-        recalculate_user(user_id, mode, rx, &ctx).await?;
+    for user_id_chunk in user_ids.chunks(100).map(|c| c.to_vec()) {
+        let mut futures = Vec::with_capacity(user_id_chunk.len());
+
+        for (user_id,) in user_id_chunk {
+            let future = tokio::spawn(recalculate_user(user_id, mode, rx, ctx.clone()));
+            futures.push(future);
+        }
+
+        futures::future::try_join_all(futures).await?;
     }
 
     Ok(())

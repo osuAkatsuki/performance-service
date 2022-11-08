@@ -142,7 +142,7 @@ impl APIReworkScore {
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize, sqlx::FromRow)]
+#[derive(Clone, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
 pub struct RippleScore {
     pub id: i32,
     pub beatmap_md5: String,
