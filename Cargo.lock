@@ -1544,8 +1544,8 @@ dependencies = [
  "redis",
  "reqwest",
  "rkyv",
- "rosu-pp 0.9.1 (git+https://github.com/MaxOhn/rosu-pp)",
- "rosu-pp 0.9.1 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs)",
+ "rosu-pp 0.9.1",
+ "rosu-pp 0.9.2",
  "serde",
  "serde_json",
  "sqlx",
@@ -1919,8 +1919,8 @@ dependencies = [
 
 [[package]]
 name = "rosu-pp"
-version = "0.9.1"
-source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs#4137520bbb09b108bd1e69d15da144e347d8e3a8"
+version = "0.9.2"
+source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=e3e583ce40c8b277a66919579b1f4e6cfb0f1c79#e3e583ce40c8b277a66919579b1f4e6cfb0f1c79"
 dependencies = [
  "tokio",
 ]
