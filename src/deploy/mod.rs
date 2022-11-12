@@ -475,19 +475,46 @@ struct RecalculateContext {
 }
 
 pub async fn serve(context: Context) -> anyhow::Result<()> {
+    print!("Enter the modes (comma delimited) to deploy: ");
+    std::io::stdout().flush().unwrap();
+
+    let mut modes_str = String::new();
+    std::io::stdin().read_line(&mut rework_id_str)?;
+    let modes = modes_str
+        .trim()
+        .split(',')
+        .map(|s| s.parse::<i32>().unwrap())
+        .collect::<Vec<_>>();
+
+    print!("\n");
+    std::io::stdout().flush().unwrap();
+
+    print!("Enter the relax bits (comma delimited) to deploy: ");
+    std::io::stdout().flush().unwrap();
+
+    let mut relax_str = String::new();
+    std::io::stdin().read_line(&mut rework_id_str)?;
+    let relax_bits = modes_str
+        .trim()
+        .split(',')
+        .map(|s| s.parse::<i32>().unwrap())
+        .collect::<Vec<_>>();
+
+    print!("\n");
+    std::io::stdout().flush().unwrap();
+
     let recalculate_context = Arc::new(Mutex::new(RecalculateContext {
         beatmaps: HashMap::new(),
     }));
 
     let context_arc = Arc::new(context);
 
-    for mode in vec![1, 2, 3] {
-        //for mode in vec![0, 1, 2, 3] {
+    for mode in modes {
         let rx = vec![0, 1, 2].contains(&mode);
         let ap = mode == 0;
 
         if rx || ap {
-            for rx in vec![0, 1, 2] {
+            for rx in relax_bits {
                 recalculate_mode_scores(mode, rx, context_arc.clone(), recalculate_context.clone())
                     .await?;
             }
@@ -497,12 +524,12 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
         }
     }
 
-    for mode in vec![0, 1, 2, 3] {
+    for mode in modes {
         let rx = vec![0, 1, 2].contains(&mode);
         let ap = mode == 0;
 
         if rx || ap {
-            for rx in vec![0, 1, 2] {
+            for rx in relax_bits {
                 recalculate_mode_users(mode, rx, context_arc.clone()).await?;
             }
         } else {
