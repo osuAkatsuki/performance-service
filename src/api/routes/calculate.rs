@@ -64,10 +64,7 @@ async fn calculate_oppai_pp(
     Ok(CalculateResponse { stars, pp })
 }
 
-async fn calculate_bancho_pp(
-    beatmap_path: PathBuf,
-    request: &CalculateRequest,
-) -> CalculateResponse {
+async fn calculate_rosu_pp(beatmap_path: PathBuf, request: &CalculateRequest) -> CalculateResponse {
     let beatmap = match Beatmap::from_path(beatmap_path).await {
         Ok(beatmap) => beatmap,
         Err(_) => {
@@ -156,7 +153,7 @@ async fn calculate_play(
                 },
             }
         } else {
-            calculate_bancho_pp(beatmap_path, &request).await
+            calculate_rosu_pp(beatmap_path, &request).await
         };
 
         results.push(result);

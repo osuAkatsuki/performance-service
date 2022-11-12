@@ -69,7 +69,7 @@ async fn calculate_oppai_pp(
     Ok(CalculateResponse { stars, pp })
 }
 
-async fn calculate_bancho_pp(
+async fn calculate_rosu_pp(
     beatmap_path: PathBuf,
     request: &CalculateRequest,
     recalc_ctx: &Arc<Mutex<RecalculateContext>>,
@@ -158,7 +158,7 @@ async fn recalculate_score(
                 }
             }
         } else {
-            calculate_bancho_pp(beatmap_path, &request, &recalc_ctx).await
+            calculate_rosu_pp(beatmap_path, &request, &recalc_ctx).await
         };
 
     let rx = if score.mods & RX > 0 {
@@ -249,10 +249,10 @@ async fn recalculate_mode_scores(
         let mut futures = Vec::new();
 
         for score in score_chunk {
-        let beatmap_path =
-            Path::new(&ctx.config.beatmaps_path).join(format!("{}.osu", score.beatmap_id));
+            let beatmap_path =
+                Path::new(&ctx.config.beatmaps_path).join(format!("{}.osu", score.beatmap_id));
 
-        if !beatmap_path.exists() {
+            if !beatmap_path.exists() {
                 log::info!(
                     "Beatmap {} doesn't exist, fetching from bancho",
                     score.beatmap_id
@@ -260,13 +260,13 @@ async fn recalculate_mode_scores(
 
                 let response =
                     reqwest::get(&format!("https://old.ppy.sh/osu/{}", score.beatmap_id))
-                .await?
-                .error_for_status()?;
+                        .await?
+                        .error_for_status()?;
 
-            let mut file = File::create(&beatmap_path).await?;
-            let mut content = Cursor::new(response.bytes().await?);
-            tokio::io::copy(&mut content, &mut file).await?;
-        }
+                let mut file = File::create(&beatmap_path).await?;
+                let mut content = Cursor::new(response.bytes().await?);
+                tokio::io::copy(&mut content, &mut file).await?;
+            }
 
             let future = tokio::spawn(recalculate_score(
                 score,
@@ -481,7 +481,8 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
 
     let context_arc = Arc::new(context);
 
-    for mode in vec![0, 1, 2, 3] {
+    for mode in vec![1, 2, 3] {
+        //for mode in vec![0, 1, 2, 3] {
         let rx = vec![0, 1, 2].contains(&mode);
         let ap = mode == 0;
 
