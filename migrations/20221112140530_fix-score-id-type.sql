@@ -1,0 +1,1 @@
+alter table rework_scores modify score_id bigint not null;

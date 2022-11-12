@@ -2,7 +2,7 @@ use super::beatmap::Beatmap;
 
 #[derive(serde::Serialize, serde::Deserialize, sqlx::FromRow)]
 pub struct ReworkScore {
-    pub score_id: i32,
+    pub score_id: i64,
     pub beatmap_id: i32,
     pub beatmapset_id: i32,
     pub user_id: i32,
@@ -47,7 +47,7 @@ impl ReworkScore {
 
 #[derive(serde::Serialize, serde::Deserialize, sqlx::FromRow)]
 pub struct APIBaseReworkScore {
-    pub score_id: i32,
+    pub score_id: i64,
     pub beatmap_id: i32,
     pub beatmapset_id: i32,
     pub user_id: i32,
@@ -96,7 +96,7 @@ impl APIBaseReworkScore {
 
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct APIReworkScore {
-    pub score_id: i32,
+    pub score_id: i64,
     pub user_id: i32,
     pub rework_id: i32,
     pub max_combo: i32,
@@ -144,7 +144,7 @@ impl APIReworkScore {
 
 #[derive(Clone, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
 pub struct RippleScore {
-    pub id: i32,
+    pub id: i64,
     pub beatmap_md5: String,
     pub userid: i32,
     pub score: i64,
