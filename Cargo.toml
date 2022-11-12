@@ -29,7 +29,6 @@ rkyv = { version = "0.7", features = ["validation"] }
 bytecheck = "0.6.9"
 tokio-executor-trait = "2.1.0"
 tokio-stream = "0.1.11"
-bancho-rework = { package = "rosu-pp", git = "https://github.com/MaxOhn/rosu-pp", features = ["async_tokio"] }
 redis = { version = "0.22.0", features = ["tokio-comp"] }
 bcrypt = "0.13.0"
 uuid = { version = "1.2.1", features = ["v4"] }
@@ -38,6 +37,7 @@ strsim = "0.10.0"
 akatsuki-pp-rs = { package = "rosu-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "e3e583ce40c8b277a66919579b1f4e6cfb0f1c79", features = ["async_tokio"] }
 oppai-rs = { git = "https://github.com/osuAkatsuki/oppai-rs", rev = "cd426a55df501a17b2895b3f1ddc1ee71bf4233e" }
 reqwest = "0.11"
+autopilot-rework = { package = "rosu-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "816aee2a7738a452a6b4489f1b66b30a74d7cb77", features = ["async_tokio"] }
 
 [profile.release]
 lto = "fat"

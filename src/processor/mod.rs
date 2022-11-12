@@ -19,16 +19,19 @@ use crate::{
     usecases,
 };
 
-use bancho_rework;
-use bancho_rework::BeatmapExt;
+use autopilot_rework;
+use autopilot_rework::BeatmapExt;
 
 fn round(x: f32, decimals: u32) -> f32 {
     let y = 10i32.pow(decimals) as f32;
     (x * y).round() / y
 }
 
-async fn calculate_bancho_rework(score: &RippleScore, beatmap_path: &Path) -> anyhow::Result<f32> {
-    let beatmap = match bancho_rework::Beatmap::from_path(beatmap_path).await {
+async fn calculate_autopilot_rework(
+    score: &RippleScore,
+    beatmap_path: &Path,
+) -> anyhow::Result<f32> {
+    let beatmap = match autopilot_rework::Beatmap::from_path(beatmap_path).await {
         Ok(beatmap) => beatmap,
         Err(_) => return Ok(0.0),
     };
@@ -36,10 +39,10 @@ async fn calculate_bancho_rework(score: &RippleScore, beatmap_path: &Path) -> an
     let result = beatmap
         .pp()
         .mode(match score.play_mode {
-            0 => bancho_rework::GameMode::Osu,
-            1 => bancho_rework::GameMode::Taiko,
-            2 => bancho_rework::GameMode::Catch,
-            3 => bancho_rework::GameMode::Mania,
+            0 => autopilot_rework::GameMode::Osu,
+            1 => autopilot_rework::GameMode::Taiko,
+            2 => autopilot_rework::GameMode::Catch,
+            3 => autopilot_rework::GameMode::Mania,
             _ => return Ok(0.0),
         })
         .mods(score.mods as u32)
@@ -65,8 +68,8 @@ async fn process_scores(
 
     for score in &scores {
         let new_pp = match rework.rework_id {
-            1..=6 => {
-                calculate_bancho_rework(
+            7 => {
+                calculate_autopilot_rework(
                     score,
                     Path::new(&context.config.beatmaps_path)
                         .join(format!("{}.osu", score.beatmap_id))
