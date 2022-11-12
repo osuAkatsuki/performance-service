@@ -10,6 +10,7 @@ use std::{
     time::SystemTime,
 };
 
+use std::io::Write;
 use tokio::fs::File;
 use tokio::sync::Mutex;
 
@@ -479,7 +480,7 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
     std::io::stdout().flush().unwrap();
 
     let mut modes_str = String::new();
-    std::io::stdin().read_line(&mut rework_id_str)?;
+    std::io::stdin().read_line(&mut modes_str)?;
     let modes = modes_str
         .trim()
         .split(',')
@@ -493,8 +494,8 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
     std::io::stdout().flush().unwrap();
 
     let mut relax_str = String::new();
-    std::io::stdin().read_line(&mut rework_id_str)?;
-    let relax_bits = modes_str
+    std::io::stdin().read_line(&mut relax_str)?;
+    let relax_bits = relax_str
         .trim()
         .split(',')
         .map(|s| s.parse::<i32>().unwrap())
@@ -509,14 +510,21 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
 
     let context_arc = Arc::new(context);
 
-    for mode in modes {
+    for mode in &modes {
+        let mode = mode.clone();
+
         let rx = vec![0, 1, 2].contains(&mode);
         let ap = mode == 0;
 
         if rx || ap {
-            for rx in relax_bits {
-                recalculate_mode_scores(mode, rx, context_arc.clone(), recalculate_context.clone())
-                    .await?;
+            for rx in &relax_bits {
+                recalculate_mode_scores(
+                    mode,
+                    rx.clone(),
+                    context_arc.clone(),
+                    recalculate_context.clone(),
+                )
+                .await?;
             }
         } else {
             recalculate_mode_scores(mode, 0, context_arc.clone(), recalculate_context.clone())
@@ -524,13 +532,15 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
         }
     }
 
-    for mode in modes {
+    for mode in &modes {
+        let mode = mode.clone();
+
         let rx = vec![0, 1, 2].contains(&mode);
         let ap = mode == 0;
 
         if rx || ap {
-            for rx in relax_bits {
-                recalculate_mode_users(mode, rx, context_arc.clone()).await?;
+            for rx in &relax_bits {
+                recalculate_mode_users(mode, rx.clone(), context_arc.clone()).await?;
             }
         } else {
             recalculate_mode_users(mode, 0, context_arc.clone()).await?;
