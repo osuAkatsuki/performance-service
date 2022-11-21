@@ -1441,16 +1441,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "oppai-rs"
-version = "0.2.4"
-source = "git+https://github.com/osuAkatsuki/oppai-rs?rev=cd426a55df501a17b2895b3f1ddc1ee71bf4233e#cd426a55df501a17b2895b3f1ddc1ee71bf4233e"
-dependencies = [
- "bitflags",
- "cc",
- "libc",
-]
-
-[[package]]
 name = "os_str_bytes"
 version = "6.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1540,13 +1530,10 @@ dependencies = [
  "futures",
  "lapin",
  "log",
- "oppai-rs",
  "redis",
  "reqwest",
  "rkyv",
- "rosu-pp 0.9.2 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=816aee2a7738a452a6b4489f1b66b30a74d7cb77)",
- "rosu-pp 0.9.2 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=a0acc14f3465dc83efdb5092b81a8fd514f358a0)",
- "rosu-pp 0.9.2 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=e3e583ce40c8b277a66919579b1f4e6cfb0f1c79)",
+ "rosu-pp",
  "serde",
  "serde_json",
  "sqlx",
@@ -1913,23 +1900,7 @@ dependencies = [
 [[package]]
 name = "rosu-pp"
 version = "0.9.2"
-source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=816aee2a7738a452a6b4489f1b66b30a74d7cb77#816aee2a7738a452a6b4489f1b66b30a74d7cb77"
-dependencies = [
- "tokio",
-]
-
-[[package]]
-name = "rosu-pp"
-version = "0.9.2"
-source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=a0acc14f3465dc83efdb5092b81a8fd514f358a0#a0acc14f3465dc83efdb5092b81a8fd514f358a0"
-dependencies = [
- "tokio",
-]
-
-[[package]]
-name = "rosu-pp"
-version = "0.9.2"
-source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=e3e583ce40c8b277a66919579b1f4e6cfb0f1c79#e3e583ce40c8b277a66919579b1f4e6cfb0f1c79"
+source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=ad3afd573c33ef60141c6c83fe9d2a4c2ac83819#ad3afd573c33ef60141c6c83fe9d2a4c2ac83819"
 dependencies = [
  "tokio",
 ]

@@ -32,36 +32,38 @@ fn round(x: f32, decimals: u32) -> f32 {
     (x * y).round() / y
 }
 
-async fn calculate_oppai_pp(
+async fn calculate_special_pp(
     beatmap_path: PathBuf,
     request: &CalculateRequest,
-) -> anyhow::Result<CalculateResponse> {
-    let oppai: &mut Oppai = &mut Oppai::new(&beatmap_path)?;
+) -> CalculateResponse {
+    let beatmap = match Beatmap::from_path(beatmap_path).await {
+        Ok(beatmap) => beatmap,
+        Err(_) => {
+            return CalculateResponse {
+                stars: 0.0,
+                pp: 0.0,
+            }
+        }
+    };
 
-    let final_oppai = match oppai
-        .mods(OppaiMods::from_bits_truncate(request.mods))
-        .combo(Combo::NonFC {
-            max_combo: request.max_combo as u32,
-            misses: request.miss_count as u32,
-        }) {
-        Ok(oppai) => oppai,
-        Err(_) => oppai.combo(Combo::FC(0))?,
-    }
-    .accuracy(request.accuracy)?;
+    let result = akatsuki_pp_rs::osu_2019::OsuPP::new(&beatmap)
+        .mods(request.mods as u32)
+        .combo(request.max_combo as usize)
+        .accuracy(request.accuracy)
+        .misses(request.miss_count as usize)
+        .calculate();
 
-    let (mut pp, mut stars) = final_oppai.run();
-    pp = round(pp, 2);
-    stars = round(stars, 2);
-
+    let mut pp = round(result.pp as f32, 2);
     if pp.is_infinite() || pp.is_nan() {
         pp = 0.0;
     }
 
+    let mut stars = round(result.difficulty.stars as f32, 2);
     if stars.is_infinite() || stars.is_nan() {
         stars = 0.0;
     }
 
-    Ok(CalculateResponse { stars, pp })
+    CalculateResponse { stars, pp }
 }
 
 async fn calculate_rosu_pp(beatmap_path: PathBuf, request: &CalculateRequest) -> CalculateResponse {
@@ -145,7 +147,7 @@ async fn calculate_play(
         let result = if (request.mods & RX > 0 || request.mods & AP > 0)
             && vec![0, 1].contains(&request.mode)
         {
-            match calculate_oppai_pp(beatmap_path, &request).await {
+            match calculate_special_pp(beatmap_path, &request).await {
                 Ok(result) => result,
                 Err(_) => CalculateResponse {
                     stars: 0.0,
