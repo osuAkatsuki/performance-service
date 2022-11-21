@@ -35,7 +35,7 @@ fn round(x: f32, decimals: u32) -> f32 {
     (x * y).round() / y
 }
 
-async fn calculate_special_pp(
+async fn calculate_relax_pp(
     beatmap_path: PathBuf,
     request: &CalculateRequest,
 ) -> CalculateResponse {
@@ -191,10 +191,8 @@ async fn calculate_play(
             }
         }
 
-        let result = if (request.mods & RX > 0 || request.mods & AP > 0)
-            && vec![0, 1].contains(&request.mode)
-        {
-            calculate_special_pp(beatmap_path, &request).await
+        let result = if request.mods & RX > 0 && request.mode == 0 {
+            calculate_relax_pp(beatmap_path, &request).await
         } else {
             calculate_rosu_pp(beatmap_path, &request).await
         };

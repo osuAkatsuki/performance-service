@@ -166,12 +166,11 @@ async fn recalculate_score(
         miss_count: score.count_misses,
     };
 
-    let response =
-        if (score.mods & RX > 0 || score.mods & AP > 0) && vec![0, 1].contains(&score.play_mode) {
-            calculate_special_pp(beatmap_path, &request, &recalc_ctx).await
-        } else {
-            calculate_rosu_pp(beatmap_path, &request, &recalc_ctx).await
-        };
+    let response = if score.mods & RX > 0 && score.play_mode == 0 {
+        calculate_special_pp(beatmap_path, &request, &recalc_ctx).await
+    } else {
+        calculate_rosu_pp(beatmap_path, &request, &recalc_ctx).await
+    };
 
     let rx = if score.mods & RX > 0 {
         1
@@ -618,27 +617,27 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
 
     let context_arc = Arc::new(context);
 
-    // for mode in &modes {
-    //     let mode = mode.clone();
+    for mode in &modes {
+        let mode = mode.clone();
 
-    //     let rx = vec![0, 1, 2].contains(&mode);
-    //     let ap = mode == 0;
+        let rx = vec![0, 1, 2].contains(&mode);
+        let ap = mode == 0;
 
-    //     if rx || ap {
-    //         for rx in &relax_bits {
-    //             recalculate_mode_scores(
-    //                 mode,
-    //                 rx.clone(),
-    //                 context_arc.clone(),
-    //                 recalculate_context.clone(),
-    //             )
-    //             .await?;
-    //         }
-    //     } else {
-    //         recalculate_mode_scores(mode, 0, context_arc.clone(), recalculate_context.clone())
-    //             .await?;
-    //     }
-    // }
+        if rx || ap {
+            for rx in &relax_bits {
+                recalculate_mode_scores(
+                    mode,
+                    rx.clone(),
+                    context_arc.clone(),
+                    recalculate_context.clone(),
+                )
+                .await?;
+            }
+        } else {
+            recalculate_mode_scores(mode, 0, context_arc.clone(), recalculate_context.clone())
+                .await?;
+        }
+    }
 
     for mode in &modes {
         let mode = mode.clone();
