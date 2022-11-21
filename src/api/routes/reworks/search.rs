@@ -32,7 +32,11 @@ async fn search_users(
     )
     .bind(format!(
         "%{}%",
-        query.query.to_lowercase().replace(" ", "_")
+        query
+            .query
+            .to_lowercase()
+            .replace(" ", "_")
+            .replace(|c: char| !c.is_ascii(), "")
     ))
     .fetch_all(&ctx.database)
     .await
