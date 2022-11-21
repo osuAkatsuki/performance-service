@@ -1,6 +1,7 @@
 use crate::context::Context;
-use akatsuki_pp_rs::{Beatmap, BeatmapExt, GameMode};
+use akatsuki_pp_rs::{Beatmap, BeatmapExt, GameMode, PerformanceAttributes};
 use axum::{extract::Extension, routing::post, Json, Router};
+use rkyv::result;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -24,6 +25,9 @@ pub struct CalculateRequest {
 pub struct CalculateResponse {
     pub stars: f32,
     pub pp: f32,
+    pub ar: f32,
+    pub od: f32,
+    pub max_combo: i32,
 }
 
 fn round(x: f32, decimals: u32) -> f32 {
@@ -41,6 +45,9 @@ async fn calculate_special_pp(
             return CalculateResponse {
                 stars: 0.0,
                 pp: 0.0,
+                ar: 0.0,
+                od: 0.0,
+                max_combo: 0,
             }
         }
     };
@@ -62,7 +69,13 @@ async fn calculate_special_pp(
         stars = 0.0;
     }
 
-    CalculateResponse { stars, pp }
+    CalculateResponse {
+        stars,
+        pp,
+        ar: result.difficulty.ar as f32,
+        od: result.difficulty.od as f32,
+        max_combo: result.difficulty.max_combo as i32,
+    }
 }
 
 async fn calculate_rosu_pp(beatmap_path: PathBuf, request: &CalculateRequest) -> CalculateResponse {
@@ -72,6 +85,9 @@ async fn calculate_rosu_pp(beatmap_path: PathBuf, request: &CalculateRequest) ->
             return CalculateResponse {
                 stars: 0.0,
                 pp: 0.0,
+                ar: 0.0,
+                od: 0.0,
+                max_combo: 0,
             }
         }
     };
@@ -101,7 +117,36 @@ async fn calculate_rosu_pp(beatmap_path: PathBuf, request: &CalculateRequest) ->
         stars = 0.0;
     }
 
-    CalculateResponse { stars, pp }
+    match result {
+        PerformanceAttributes::Osu(result) => CalculateResponse {
+            stars,
+            pp,
+            ar: result.difficulty.ar as f32,
+            od: result.difficulty.od as f32,
+            max_combo: result.difficulty.max_combo as i32,
+        },
+        PerformanceAttributes::Taiko(result) => CalculateResponse {
+            stars,
+            pp,
+            ar: 0.0,
+            od: 0.0,
+            max_combo: result.difficulty.max_combo as i32,
+        },
+        PerformanceAttributes::Catch(result) => CalculateResponse {
+            stars,
+            pp,
+            ar: 0.0,
+            od: 0.0,
+            max_combo: result.difficulty.max_combo() as i32,
+        },
+        PerformanceAttributes::Mania(result) => CalculateResponse {
+            stars,
+            pp,
+            ar: 0.0,
+            od: 0.0,
+            max_combo: result.difficulty.max_combo as i32,
+        },
+    }
 }
 
 const RX: i32 = 1 << 7;
@@ -136,6 +181,9 @@ async fn calculate_play(
                     results.push(CalculateResponse {
                         stars: 0.0,
                         pp: 0.0,
+                        ar: 0.0,
+                        od: 0.0,
+                        max_combo: 0,
                     });
 
                     continue;
