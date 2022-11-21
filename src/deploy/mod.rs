@@ -73,8 +73,8 @@ async fn calculate_special_pp(
     let result = akatsuki_pp_rs::osu_2019::OsuPP::new(&beatmap)
         .mods(request.mods as u32)
         .combo(request.max_combo as usize)
-        .accuracy(request.accuracy)
         .misses(request.miss_count as usize)
+        .accuracy(request.accuracy)
         .calculate();
 
     let mut pp = round(result.pp as f32, 2);
@@ -322,7 +322,7 @@ async fn recalculate_status(
         _ => unreachable!(),
     };
 
-    let scores: Vec<(i64, i32)> = sqlx::query_as(
+    let scores: Vec<(i64, f32)> = sqlx::query_as(
         &format!(
             "SELECT id, pp FROM {} WHERE userid = ? AND play_mode = ? AND beatmap_md5 = ? AND completed IN (2, 3) ORDER BY pp DESC",
             scores_table
@@ -618,27 +618,27 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
 
     let context_arc = Arc::new(context);
 
-    for mode in &modes {
-        let mode = mode.clone();
+    // for mode in &modes {
+    //     let mode = mode.clone();
 
-        let rx = vec![0, 1, 2].contains(&mode);
-        let ap = mode == 0;
+    //     let rx = vec![0, 1, 2].contains(&mode);
+    //     let ap = mode == 0;
 
-        if rx || ap {
-            for rx in &relax_bits {
-                recalculate_mode_scores(
-                    mode,
-                    rx.clone(),
-                    context_arc.clone(),
-                    recalculate_context.clone(),
-                )
-                .await?;
-            }
-        } else {
-            recalculate_mode_scores(mode, 0, context_arc.clone(), recalculate_context.clone())
-                .await?;
-        }
-    }
+    //     if rx || ap {
+    //         for rx in &relax_bits {
+    //             recalculate_mode_scores(
+    //                 mode,
+    //                 rx.clone(),
+    //                 context_arc.clone(),
+    //                 recalculate_context.clone(),
+    //             )
+    //             .await?;
+    //         }
+    //     } else {
+    //         recalculate_mode_scores(mode, 0, context_arc.clone(), recalculate_context.clone())
+    //             .await?;
+    //     }
+    // }
 
     for mode in &modes {
         let mode = mode.clone();

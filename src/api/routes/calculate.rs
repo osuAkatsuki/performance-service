@@ -55,8 +55,8 @@ async fn calculate_special_pp(
     let result = akatsuki_pp_rs::osu_2019::OsuPP::new(&beatmap)
         .mods(request.mods as u32)
         .combo(request.max_combo as usize)
-        .accuracy(request.accuracy)
         .misses(request.miss_count as usize)
+        .accuracy(request.accuracy)
         .calculate();
 
     let mut pp = round(result.pp as f32, 2);
