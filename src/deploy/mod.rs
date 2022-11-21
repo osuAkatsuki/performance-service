@@ -360,7 +360,7 @@ async fn recalculate_statuses(
         _ => unreachable!(),
     };
 
-    let beatmap_md5s: Vec<String> = sqlx::query_as(
+    let beatmap_md5s: Vec<(String,)> = sqlx::query_as(
         &format!(
             "SELECT DISTINCT (beatmap_md5) FROM {} WHERE userid = ? AND completed IN (2, 3) AND play_mode = ?",
             scores_table
@@ -374,7 +374,7 @@ async fn recalculate_statuses(
     for beatmap_chunk in beatmap_md5s.chunks(100).map(|c| c.to_vec()) {
         let mut futures = Vec::with_capacity(beatmap_chunk.len());
 
-        for beatmap_md5 in beatmap_chunk {
+        for (beatmap_md5,) in beatmap_chunk {
             let future = tokio::spawn(recalculate_status(
                 user_id,
                 mode,
