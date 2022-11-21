@@ -59,6 +59,27 @@ async fn calculate_autopilot_rework(
     Ok(pp)
 }
 
+async fn calculate_relax_rework(score: &RippleScore, beatmap_path: &Path) -> anyhow::Result<f32> {
+    let beatmap = match relax_rework::Beatmap::from_path(beatmap_path).await {
+        Ok(beatmap) => beatmap,
+        Err(_) => return Ok(0.0),
+    };
+
+    let result = relax_rework::osu_2019::OsuPP::new(&beatmap)
+        .mods(score.mods as u32)
+        .combo(score.max_combo as usize)
+        .accuracy(score.accuracy)
+        .misses(score.count_misses as usize)
+        .calculate();
+
+    let pp = round(result.pp as f32, 2);
+    if pp.is_infinite() || pp.is_nan() {
+        return Ok(0.0);
+    }
+
+    Ok(pp)
+}
+
 async fn process_scores(
     rework: &Rework,
     scores: Vec<RippleScore>,
@@ -70,6 +91,15 @@ async fn process_scores(
         let new_pp = match rework.rework_id {
             7 => {
                 calculate_autopilot_rework(
+                    score,
+                    Path::new(&context.config.beatmaps_path)
+                        .join(format!("{}.osu", score.beatmap_id))
+                        .as_ref(),
+                )
+                .await?
+            }
+            8 => {
+                calculate_relax_rework(
                     score,
                     Path::new(&context.config.beatmaps_path)
                         .join(format!("{}.osu", score.beatmap_id))
