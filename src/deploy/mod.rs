@@ -297,12 +297,109 @@ fn calculate_new_pp(scores: &Vec<RippleScore>, score_count: i32) -> i32 {
     total_pp.round() as i32
 }
 
+async fn recalculate_status(
+    user_id: i32,
+    mode: i32,
+    rx: i32,
+    beatmap_md5: String,
+    ctx: Arc<Context>,
+) -> anyhow::Result<()> {
+    let scores_table = match rx {
+        0 => "scores",
+        1 => "scores_relax",
+        2 => "scores_ap",
+        _ => unreachable!(),
+    };
+
+    let scores: Vec<(i64, i32)> = sqlx::query_as(
+        &format!(
+            "SELECT id, pp FROM {} WHERE userid = ? AND play_mode = ? AND beatmap_md5 = ? AND completed IN (2, 3) ORDER BY pp DESC",
+            scores_table
+        )
+    )
+    .bind(user_id)
+    .bind(mode)
+    .bind(beatmap_md5)
+    .fetch_all(&ctx.database)
+    .await?;
+
+    let best_id = scores[0].0;
+    let non_bests = scores[1..].to_vec();
+
+    sqlx::query(&format!(
+        "UPDATE {} SET completed = 3 WHERE id = ?",
+        scores_table
+    ))
+    .bind(best_id)
+    .execute(&ctx.database)
+    .await?;
+
+    for non_best in non_bests {
+        sqlx::query(&format!(
+            "UPDATE {} SET completed = 2 WHERE id = ?",
+            scores_table
+        ))
+        .bind(non_best.0)
+        .execute(&ctx.database)
+        .await?;
+    }
+
+    Ok(())
+}
+
+async fn recalculate_statuses(
+    user_id: i32,
+    mode: i32,
+    rx: i32,
+    ctx: Arc<Context>,
+) -> anyhow::Result<()> {
+    let scores_table = match rx {
+        0 => "scores",
+        1 => "scores_relax",
+        2 => "scores_ap",
+        _ => unreachable!(),
+    };
+
+    let beatmap_md5s: Vec<String> = sqlx::query_as(
+        &format!(
+            "SELECT DISTINCT (beatmap_md5) FROM {} WHERE userid = ? AND completed IN (2, 3) AND play_mode = ?",
+            scores_table
+        )
+    )
+        .bind(user_id)
+        .bind(mode)
+        .fetch_all(&ctx.database)
+        .await?;
+
+    for beatmap_chunk in beatmap_md5s.chunks(100).map(|c| c.to_vec()) {
+        let mut futures = Vec::with_capacity(beatmap_chunk.len());
+
+        for beatmap_md5 in beatmap_chunk {
+            let future = tokio::spawn(recalculate_status(
+                user_id,
+                mode,
+                rx,
+                beatmap_md5,
+                ctx.clone(),
+            ));
+
+            futures.push(future);
+        }
+
+        futures::future::try_join_all(futures).await?;
+    }
+
+    Ok(())
+}
+
 async fn recalculate_user(
     user_id: i32,
     mode: i32,
     rx: i32,
     ctx: Arc<Context>,
 ) -> anyhow::Result<()> {
+    recalculate_statuses(user_id, mode, rx, ctx.clone()).await?;
+
     let scores_table = match rx {
         0 => "scores",
         1 => "scores_relax",
