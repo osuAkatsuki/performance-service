@@ -1,7 +1,6 @@
 use crate::context::Context;
 use akatsuki_pp_rs::{Beatmap, BeatmapExt, GameMode};
 use axum::{extract::Extension, routing::post, Json, Router};
-use oppai_rs::{Combo, Mods as OppaiMods, Oppai};
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -147,13 +146,7 @@ async fn calculate_play(
         let result = if (request.mods & RX > 0 || request.mods & AP > 0)
             && vec![0, 1].contains(&request.mode)
         {
-            match calculate_special_pp(beatmap_path, &request).await {
-                Ok(result) => result,
-                Err(_) => CalculateResponse {
-                    stars: 0.0,
-                    pp: 0.0,
-                },
-            }
+            calculate_special_pp(beatmap_path, &request).await
         } else {
             calculate_rosu_pp(beatmap_path, &request).await
         };

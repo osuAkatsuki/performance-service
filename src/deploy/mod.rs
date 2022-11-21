@@ -1,6 +1,5 @@
 use crate::{context::Context, models::score::RippleScore};
 use akatsuki_pp_rs::{Beatmap, BeatmapExt, GameMode};
-use oppai_rs::{Combo, Mods as OppaiMods, Oppai};
 use redis::AsyncCommands;
 use std::{
     collections::HashMap,

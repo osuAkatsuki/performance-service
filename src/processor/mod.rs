@@ -19,9 +19,6 @@ use crate::{
     usecases,
 };
 
-use autopilot_rework;
-use autopilot_rework::BeatmapExt;
-
 fn round(x: f32, decimals: u32) -> f32 {
     let y = 10i32.pow(decimals) as f32;
     (x * y).round() / y
