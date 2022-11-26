@@ -34,7 +34,7 @@ bcrypt = "0.13.0"
 uuid = { version = "1.2.1", features = ["v4"] }
 futures = "0.3.17"
 strsim = "0.10.0"
-akatsuki-pp-rs = { package = "rosu-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "ad3afd573c33ef60141c6c83fe9d2a4c2ac83819", features = ["async_tokio"] }
+akatsuki-pp-rs = { package = "rosu-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "b2c387a26965e2f3ccad585238113d7d29449f7a", features = ["async_tokio"] }
 reqwest = "0.11"
 
 [profile.release]
