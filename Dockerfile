@@ -5,6 +5,7 @@ WORKDIR /performance-service
 
 COPY ./Cargo.lock ./Cargo.lock
 COPY ./Cargo.toml ./Cargo.toml
+COPY ./build.rs ./build.rs
 
 RUN cargo build --release & rm src/*.rs & rm migrations/*.sql
 
