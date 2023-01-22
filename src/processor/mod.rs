@@ -32,7 +32,11 @@ fn round(x: f32, decimals: u32) -> f32 {
 }
 
 async fn calculate_conceptual_pp(beatmap_path: PathBuf, score: &RippleScore) -> f32 {
-    let beatmap = Beatmap::from_path(beatmap_path).await.unwrap();
+    let beatmap = match Beatmap::from_path(beatmap_path).await {
+        Ok(beatmap) => beatmap,
+        Err(_) => return 0.0,
+    };
+
     let result = beatmap
         .pp()
         .mode(match score.play_mode {
