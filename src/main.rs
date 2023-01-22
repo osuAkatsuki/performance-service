@@ -1,9 +1,10 @@
 use clap::Parser;
 use deadpool_lapin::{Manager, Pool};
 use lapin::ConnectionProperties;
-use performance_service::{api, config::Config, context::Context, deploy, mass_recalc, processor};
+use performance_service::{
+    api, config::Config, context::Context, deploy, mass_recalc, models::pool::DbPool, processor,
+};
 use redis::Client;
-use sqlx::mysql::MySqlPoolOptions;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -12,9 +13,7 @@ async fn main() -> anyhow::Result<()> {
 
     let config = Config::parse();
 
-    let database = MySqlPoolOptions::new()
-        .connect(&config.database_url)
-        .await?;
+    let database = DbPool::new(config.database_url.clone());
 
     let amqp_manager = Manager::new(config.amqp_url.clone(), ConnectionProperties::default());
     let amqp = Pool::builder(amqp_manager).max_size(10).build()?;

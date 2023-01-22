@@ -5,6 +5,7 @@ use crate::models::rework::Rework;
 use crate::repositories;
 use lapin::{options::BasicPublishOptions, BasicProperties};
 use redis::AsyncCommands;
+use std::ops::DerefMut;
 use std::sync::Arc;
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -22,7 +23,7 @@ pub async fn create(
     let user_info: Option<(i32, String)> =
         sqlx::query_as("SELECT id, password_md5 FROM users WHERE username_safe = ?")
             .bind(&username.to_lowercase().replace(" ", "_"))
-            .fetch_optional(&context.database)
+            .fetch_optional(context.database.get().await.unwrap().deref_mut())
             .await
             .unwrap();
 
@@ -83,7 +84,7 @@ pub async fn enqueue(
     let user_privileges: Option<(i32,)> =
         sqlx::query_as(r#"SELECT privileges FROM users WHERE id = ?"#)
             .bind(user_id)
-            .fetch_optional(&context.database)
+            .fetch_optional(context.database.get().await?.deref_mut())
             .await
             .unwrap();
 
@@ -103,7 +104,7 @@ pub async fn enqueue(
 
     let rework: Rework = sqlx::query_as(r#"SELECT * FROM reworks WHERE rework_id = ?"#)
         .bind(rework_id)
-        .fetch_one(&context.database)
+        .fetch_one(context.database.get().await?.deref_mut())
         .await
         .unwrap();
 
@@ -113,7 +114,7 @@ pub async fn enqueue(
     .bind(user_id)
     .bind(rework_id)
     .bind(rework.updated_at)
-    .fetch_optional(&context.database)
+    .fetch_optional(context.database.get().await?.deref_mut())
     .await
     .unwrap();
 
@@ -127,7 +128,7 @@ pub async fn enqueue(
     sqlx::query(r#"REPLACE INTO rework_queue (user_id, rework_id) VALUES (?, ?)"#)
         .bind(user_id)
         .bind(rework_id)
-        .execute(&context.database)
+        .execute(context.database.get().await?.deref_mut())
         .await
         .unwrap();
 

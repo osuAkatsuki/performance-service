@@ -1,6 +1,6 @@
-use std::io::Write;
 use std::sync::Arc;
 use std::time::SystemTime;
+use std::{io::Write, ops::DerefMut};
 
 use crate::{
     context::Context,
@@ -27,7 +27,7 @@ async fn queue_user(user_id: i32, rework: &Rework, context: &Context) {
     ))
     .bind(user_id)
     .bind(rework.mode)
-    .fetch_optional(&context.database)
+    .fetch_optional(context.database.get().await.unwrap().deref_mut())
     .await
     .unwrap_or(None);
 
@@ -55,7 +55,7 @@ async fn queue_user(user_id: i32, rework: &Rework, context: &Context) {
     .bind(user_id)
     .bind(rework.rework_id)
     .bind(rework.updated_at)
-    .fetch_optional(&context.database)
+    .fetch_optional(context.database.get().await.unwrap().deref_mut())
     .await
     .unwrap();
 
@@ -66,7 +66,7 @@ async fn queue_user(user_id: i32, rework: &Rework, context: &Context) {
     sqlx::query(r#"REPLACE INTO rework_queue (user_id, rework_id) VALUES (?, ?)"#)
         .bind(user_id)
         .bind(rework.rework_id)
-        .execute(&context.database)
+        .execute(context.database.get().await.unwrap().deref_mut())
         .await
         .unwrap();
 
@@ -108,17 +108,17 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
 
     sqlx::query("DELETE FROM rework_scores WHERE rework_id = ?")
         .bind(rework_id)
-        .execute(&context.database)
+        .execute(context.database.get().await?.deref_mut())
         .await?;
 
     sqlx::query("DELETE FROM rework_stats WHERE rework_id = ?")
         .bind(rework_id)
-        .execute(&context.database)
+        .execute(context.database.get().await?.deref_mut())
         .await?;
 
     sqlx::query("DELETE FROM rework_queue WHERE rework_id = ?")
         .bind(rework_id)
-        .execute(&context.database)
+        .execute(context.database.get().await?.deref_mut())
         .await?;
 
     let mut redis_connection = context.redis.get_async_connection().await?;
@@ -142,7 +142,7 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
     };
 
     let user_ids: Vec<(i32,)> = sqlx::query_as(&format!("SELECT users.id, pp_{} pp FROM {} INNER JOIN users USING(id) WHERE pp_{} > 0 AND users.privileges & 1 ORDER BY pp desc", stats_prefix, stats_table, stats_prefix))
-        .fetch_all(&context.database)
+        .fetch_all(context.database.get().await?.deref_mut())
         .await?;
 
     for (user_id,) in user_ids {

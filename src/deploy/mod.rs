@@ -4,11 +4,13 @@ use redis::AsyncCommands;
 use std::{
     collections::HashMap,
     io::Cursor,
+    ops::DerefMut,
     path::{Path, PathBuf},
     sync::Arc,
     time::SystemTime,
 };
 
+use deadpool::managed::Manager;
 use std::io::Write;
 use tokio::fs::File;
 use tokio::sync::Mutex;
@@ -190,7 +192,7 @@ async fn recalculate_score(
     sqlx::query(&format!("UPDATE {} SET pp = ? WHERE id = ?", scores_table))
         .bind(response.pp)
         .bind(score.id)
-        .execute(&ctx.database)
+        .execute(ctx.database.get().await?.deref_mut())
         .await?;
 
     // cache will only contain it if it's their best score
@@ -253,7 +255,7 @@ async fn recalculate_mode_scores(
         )
     )
     .bind(mode)
-    .fetch_all(&ctx.database)
+    .fetch_all(ctx.database.get().await?.deref_mut())
     .await?;
 
     for score_chunk in scores.chunks(100).map(|c| c.to_vec()) {
@@ -330,7 +332,7 @@ async fn recalculate_status(
     .bind(user_id)
     .bind(mode)
     .bind(beatmap_md5)
-    .fetch_all(&ctx.database)
+    .fetch_all(ctx.database.get().await?.deref_mut())
     .await?;
 
     let best_id = scores[0].0;
@@ -341,7 +343,7 @@ async fn recalculate_status(
         scores_table
     ))
     .bind(best_id)
-    .execute(&ctx.database)
+    .execute(ctx.database.get().await?.deref_mut())
     .await?;
 
     for non_best in non_bests {
@@ -350,7 +352,7 @@ async fn recalculate_status(
             scores_table
         ))
         .bind(non_best.0)
-        .execute(&ctx.database)
+        .execute(ctx.database.get().await?.deref_mut())
         .await?;
     }
 
@@ -378,7 +380,7 @@ async fn recalculate_statuses(
     )
         .bind(user_id)
         .bind(mode)
-        .fetch_all(&ctx.database)
+        .fetch_all(ctx.database.get().await?.deref_mut())
         .await?;
 
     for beatmap_chunk in beatmap_md5s.chunks(100).map(|c| c.to_vec()) {
@@ -438,7 +440,7 @@ async fn recalculate_user(
     )
     .bind(user_id)
     .bind(mode)
-    .fetch_all(&ctx.database)
+    .fetch_all(ctx.database.get().await?.deref_mut())
     .await?;
 
     let score_count: i32 = sqlx::query_scalar(
@@ -449,7 +451,7 @@ async fn recalculate_user(
     )
         .bind(user_id)
         .bind(mode)
-        .fetch_one(&ctx.database)
+        .fetch_one(ctx.database.get().await?.deref_mut())
         .await?;
 
     let new_pp = calculate_new_pp(&scores, score_count);
@@ -475,14 +477,14 @@ async fn recalculate_user(
     ))
     .bind(new_pp)
     .bind(user_id)
-    .execute(&ctx.database)
+    .execute(ctx.database.get().await?.deref_mut())
     .await?;
 
     let (country, user_privileges): (String, i32) = sqlx::query_as(
         "SELECT country, privileges FROM users INNER JOIN users_stats USING(id) WHERE id = ?",
     )
     .bind(user_id)
-    .fetch_one(&ctx.database)
+    .fetch_one(ctx.database.get().await?.deref_mut())
     .await?;
 
     let last_score_time: Option<i32> = sqlx::query_scalar(&format!(
@@ -493,7 +495,7 @@ async fn recalculate_user(
     ))
     .bind(user_id)
     .bind(mode)
-    .fetch_optional(&ctx.database)
+    .fetch_optional(ctx.database.get().await?.deref_mut())
     .await
     .unwrap_or(None);
 
@@ -561,7 +563,7 @@ async fn recalculate_user(
 
 async fn recalculate_mode_users(mode: i32, rx: i32, ctx: Arc<Context>) -> anyhow::Result<()> {
     let user_ids: Vec<(i32,)> = sqlx::query_as(&format!("SELECT id FROM users"))
-        .fetch_all(&ctx.database)
+        .fetch_all(ctx.database.get().await?.deref_mut())
         .await?;
 
     for user_id_chunk in user_ids.chunks(100).map(|c| c.to_vec()) {

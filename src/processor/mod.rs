@@ -1,4 +1,5 @@
 use std::{
+    ops::DerefMut,
     path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
@@ -150,7 +151,7 @@ async fn handle_queue_request(
     )
     .bind(request.user_id)
     .bind(rework.mode)
-    .fetch_all(&context.database)
+    .fetch_all(context.database.get().await?.deref_mut())
     .await?;
 
     let score_count: i32 = sqlx::query_scalar(
@@ -161,7 +162,7 @@ async fn handle_queue_request(
     )
         .bind(request.user_id)
         .bind(rework.mode)
-        .fetch_one(&context.database)
+        .fetch_one(context.database.get().await?.deref_mut())
         .await?;
 
     let rework_scores = process_scores(&rework, scores, &context).await?;
@@ -190,7 +191,7 @@ async fn handle_queue_request(
         .bind(rework_score.num_misses)
         .bind(rework_score.old_pp)
         .bind(rework_score.new_pp)
-        .execute(&context.database)
+        .execute(context.database.get().await?.deref_mut())
         .await?;
     }
 
@@ -214,7 +215,7 @@ async fn handle_queue_request(
         stats_prefix, stats_table
     ))
     .bind(request.user_id)
-    .fetch_one(&context.database)
+    .fetch_one(context.database.get().await?.deref_mut())
     .await?;
 
     let rework_stats = ReworkStats {
@@ -231,7 +232,7 @@ async fn handle_queue_request(
     .bind(rework_stats.rework_id)
     .bind(rework_stats.old_pp)
     .bind(rework_stats.new_pp)
-    .execute(&context.database)
+    .execute(context.database.get().await?.deref_mut())
     .await?;
 
     let mut redis_connection = context.redis.get_async_connection().await?;
@@ -246,7 +247,7 @@ async fn handle_queue_request(
     sqlx::query("UPDATE rework_queue SET processed_at = CURRENT_TIMESTAMP() WHERE user_id = ? AND rework_id = ?")
         .bind(request.user_id)
         .bind(request.rework_id)
-        .execute(&context.database)
+        .execute(context.database.get().await?.deref_mut())
         .await?;
 
     context

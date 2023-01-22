@@ -1,13 +1,13 @@
+use deadpool::managed::Pool;
 use lapin::Channel;
 use redis::Client;
-use sqlx::MySqlPool;
 
-use crate::config::Config;
+use crate::{config::Config, models::pool::DbPool};
 
 #[derive(Clone)]
 pub struct Context {
     pub config: Config,
-    pub database: MySqlPool,
+    pub database: Pool<DbPool>,
     pub amqp_channel: Channel,
     pub redis: Client,
 }

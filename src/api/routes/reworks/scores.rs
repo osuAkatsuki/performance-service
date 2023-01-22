@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{ops::DerefMut, sync::Arc};
 
 use axum::{
     extract::{Extension, Path},
@@ -40,7 +40,7 @@ async fn get_rework_scores(
         )
             .bind(user_id)
             .bind(rework_id)
-            .fetch_all(&ctx.database)
+            .fetch_all(ctx.database.get().await.unwrap().deref_mut())
             .await
             .unwrap();
 
@@ -50,7 +50,7 @@ async fn get_rework_scores(
             "SELECT beatmap_id, beatmapset_id, song_name FROM beatmaps WHERE beatmap_id = ?",
         )
         .bind(base_score.beatmap_id)
-        .fetch_one(&ctx.database)
+        .fetch_one(ctx.database.get().await.unwrap().deref_mut())
         .await
         .unwrap();
 

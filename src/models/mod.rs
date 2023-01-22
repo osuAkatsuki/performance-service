@@ -5,3 +5,4 @@ pub mod rework;
 pub mod score;
 pub mod stats;
 pub mod user;
+pub mod pool;

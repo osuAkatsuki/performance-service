@@ -2,7 +2,7 @@ use crate::{
     context::Context, models::leaderboard::Leaderboard, models::rework::Rework,
     models::stats::APIReworkStats,
 };
-use std::sync::Arc;
+use std::{ops::DerefMut, sync::Arc};
 
 pub struct LeaderboardsRepository {
     context: Arc<Context>,
@@ -21,7 +21,7 @@ impl LeaderboardsRepository {
     ) -> anyhow::Result<Option<Leaderboard>> {
         let rework: Rework = match sqlx::query_as(r#"SELECT * FROM reworks WHERE rework_id = ?"#)
             .bind(rework_id)
-            .fetch_optional(&self.context.database)
+            .fetch_optional(self.context.database.get().await?.deref_mut())
             .await?
         {
             Some(rework) => rework,
@@ -31,7 +31,7 @@ impl LeaderboardsRepository {
         let leaderboard_count: i32 =
             sqlx::query_scalar("SELECT COUNT(*) FROM rework_stats WHERE rework_id = ?")
                 .bind(rework.rework_id)
-                .fetch_one(&self.context.database)
+                .fetch_one(self.context.database.get().await?.deref_mut())
                 .await
                 .unwrap();
 
@@ -55,7 +55,7 @@ impl LeaderboardsRepository {
             .bind(rework.rework_id)
             .bind(offset)
             .bind(limit)
-            .fetch_all(&self.context.database)
+            .fetch_all(self.context.database.get().await?.deref_mut())
             .await
             .unwrap();
 

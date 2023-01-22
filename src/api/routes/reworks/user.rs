@@ -1,5 +1,5 @@
 use redis::AsyncCommands;
-use std::sync::Arc;
+use std::{ops::DerefMut, sync::Arc};
 
 use axum::{
     extract::{Extension, Path},
@@ -33,7 +33,7 @@ async fn get_rework_user(
         "SELECT users.username, country FROM users INNER JOIN users_stats USING(id) WHERE id = ?",
     )
     .bind(user_id)
-    .fetch_optional(&ctx.database)
+    .fetch_optional(ctx.database.get().await.unwrap().deref_mut())
     .await
     .unwrap();
 
@@ -46,7 +46,7 @@ async fn get_rework_user(
     let rework_stats: Vec<ReworkStats> =
         sqlx::query_as("SELECT * FROM rework_stats WHERE user_id = ?")
             .bind(user_id)
-            .fetch_all(&ctx.database)
+            .fetch_all(ctx.database.get().await.unwrap().deref_mut())
             .await
             .unwrap();
 
@@ -59,7 +59,7 @@ async fn get_rework_user(
     for rework_id in rework_ids {
         let rework: Rework = sqlx::query_as("SELECT * FROM reworks WHERE rework_id = ?")
             .bind(rework_id)
-            .fetch_one(&ctx.database)
+            .fetch_one(ctx.database.get().await.unwrap().deref_mut())
             .await
             .unwrap();
 
@@ -83,7 +83,7 @@ async fn get_rework_stats(
     )
         .bind(user_id)
         .bind(rework_id)
-        .fetch_optional(&ctx.database)
+        .fetch_optional(ctx.database.get().await.unwrap().deref_mut())
         .await
         .unwrap();
 
@@ -97,7 +97,7 @@ async fn get_rework_stats(
         "SELECT users_stats.country, users.username FROM users_stats INNER JOIN users USING(id) WHERE users_stats.id = ?"
     )
         .bind(user_id)
-        .fetch_one(&ctx.database)
+        .fetch_one(ctx.database.get().await.unwrap().deref_mut())
         .await
         .unwrap();
 
@@ -105,7 +105,7 @@ async fn get_rework_stats(
 
     let rework: Rework = sqlx::query_as("SELECT * FROM reworks WHERE rework_id = ?")
         .bind(rework_id)
-        .fetch_one(&ctx.database)
+        .fetch_one(ctx.database.get().await.unwrap().deref_mut())
         .await
         .unwrap();
 

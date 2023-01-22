@@ -3,7 +3,7 @@ use axum::{
     routing::get,
     Router,
 };
-use std::sync::Arc;
+use std::{ops::DerefMut, sync::Arc};
 
 use crate::context::Context;
 
@@ -38,7 +38,7 @@ async fn search_users(
             .replace(" ", "_")
             .replace(|c: char| !c.is_ascii(), "")
     ))
-    .fetch_all(&ctx.database)
+    .fetch_all(ctx.database.get().await.unwrap().deref_mut())
     .await
     .unwrap();
 
@@ -48,7 +48,7 @@ async fn search_users(
             sqlx::query_scalar("SELECT 1 FROM rework_stats WHERE user_id = ? AND rework_id = ?")
                 .bind(user.user_id)
                 .bind(rework_id)
-                .fetch_optional(&ctx.database)
+                .fetch_optional(ctx.database.get().await.unwrap().deref_mut())
                 .await
                 .unwrap()
                 .unwrap_or(false);
