@@ -36,6 +36,7 @@ futures = "0.3.17"
 strsim = "0.10.0"
 akatsuki-pp-rs = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "61cb1564b4fdbffb21748b35f58805327dc4aac4", features = ["async_tokio"] }
 reqwest = "0.11"
+conceptual-rework = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", branch = "conceptual-rework", features = ["async_tokio"] }
 
 [profile.release]
 lto = "fat"

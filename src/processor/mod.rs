@@ -1,4 +1,8 @@
-use std::{path::Path, sync::Arc, time::Duration};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+    time::Duration,
+};
 
 use lapin::{
     options::{BasicAckOptions, BasicConsumeOptions, QueueDeclareOptions},
@@ -19,9 +23,36 @@ use crate::{
     usecases,
 };
 
+use conceptual_rework::{Beatmap, BeatmapExt, GameMode};
+
 fn round(x: f32, decimals: u32) -> f32 {
     let y = 10i32.pow(decimals) as f32;
     (x * y).round() / y
+}
+
+async fn calculate_conceptual_pp(beatmap_path: PathBuf, score: &RippleScore) -> f32 {
+    let beatmap = Beatmap::from_path(beatmap_path).await.unwrap();
+    let result = beatmap
+        .pp()
+        .mode(match score.play_mode {
+            0 => GameMode::Osu,
+            1 => GameMode::Taiko,
+            2 => GameMode::Catch,
+            3 => GameMode::Mania,
+            _ => unreachable!(),
+        })
+        .mods(score.mods as u32)
+        .combo(score.max_combo as usize)
+        .accuracy(score.accuracy as f64)
+        .n_misses(score.count_misses as usize)
+        .calculate();
+
+    let mut pp = round(result.pp() as f32, 2);
+    if pp.is_infinite() || pp.is_nan() {
+        pp = 0.0;
+    }
+
+    pp
 }
 
 async fn process_scores(
@@ -33,6 +64,30 @@ async fn process_scores(
 
     for score in &scores {
         let new_pp = match rework.rework_id {
+            10 => {
+                calculate_conceptual_pp(
+                    Path::new(&context.config.beatmaps_path)
+                        .join(format!("{}.osu", score.beatmap_id)),
+                    score,
+                )
+                .await
+            }
+            11 => {
+                calculate_conceptual_pp(
+                    Path::new(&context.config.beatmaps_path)
+                        .join(format!("{}.osu", score.beatmap_id)),
+                    score,
+                )
+                .await
+            }
+            12 => {
+                calculate_conceptual_pp(
+                    Path::new(&context.config.beatmaps_path)
+                        .join(format!("{}.osu", score.beatmap_id)),
+                    score,
+                )
+                .await
+            }
             _ => unreachable!(),
         };
 

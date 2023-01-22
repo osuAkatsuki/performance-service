@@ -23,6 +23,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "akatsuki-pp"
+version = "0.9.3"
+source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?branch=conceptual-rework#2e6dd4ba45feb50904449fac9e7e277745be8207"
+dependencies = [
+ "tokio",
+]
+
+[[package]]
+name = "akatsuki-pp"
+version = "0.9.3"
+source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=61cb1564b4fdbffb21748b35f58805327dc4aac4#61cb1564b4fdbffb21748b35f58805327dc4aac4"
+dependencies = [
+ "tokio",
+]
+
+[[package]]
 name = "amq-protocol"
 version = "7.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1517,6 +1533,8 @@ checksum = "478c572c3d73181ff3c2539045f6eb99e5491218eae919370993b890cdbdd98e"
 name = "performance-service"
 version = "0.1.0"
 dependencies = [
+ "akatsuki-pp 0.9.3 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?branch=conceptual-rework)",
+ "akatsuki-pp 0.9.3 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=61cb1564b4fdbffb21748b35f58805327dc4aac4)",
  "anyhow",
  "axum",
  "bcrypt",
@@ -1533,7 +1551,6 @@ dependencies = [
  "redis",
  "reqwest",
  "rkyv",
- "rosu-pp",
  "serde",
  "serde_json",
  "sqlx",
@@ -1895,14 +1912,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "rosu-pp"
-version = "0.9.2"
-source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=b2c387a26965e2f3ccad585238113d7d29449f7a#b2c387a26965e2f3ccad585238113d7d29449f7a"
-dependencies = [
- "tokio",
 ]
 
 [[package]]
