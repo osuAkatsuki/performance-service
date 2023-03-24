@@ -24,7 +24,7 @@ use crate::{
     usecases,
 };
 
-use conceptual_rework::{Beatmap, BeatmapExt, GameMode};
+use conceptual_rework::{Beatmap as ConceptualBeatmap, BeatmapExt as ConceptualBeatmapExt, GameMode as ConceptualGameMode};
 
 fn round(x: f32, decimals: u32) -> f32 {
     let y = 10i32.pow(decimals) as f32;
@@ -32,7 +32,7 @@ fn round(x: f32, decimals: u32) -> f32 {
 }
 
 async fn calculate_conceptual_pp(beatmap_path: PathBuf, score: &RippleScore) -> f32 {
-    let beatmap = match Beatmap::from_path(beatmap_path).await {
+    let beatmap = match ConceptualBeatmap::from_path(beatmap_path).await {
         Ok(beatmap) => beatmap,
         Err(_) => return 0.0,
     };
@@ -40,10 +40,10 @@ async fn calculate_conceptual_pp(beatmap_path: PathBuf, score: &RippleScore) -> 
     let result = beatmap
         .pp()
         .mode(match score.play_mode {
-            0 => GameMode::Osu,
-            1 => GameMode::Taiko,
-            2 => GameMode::Catch,
-            3 => GameMode::Mania,
+            0 => ConceptualGameMode::Osu,
+            1 => ConceptualGameMode::Taiko,
+            2 => ConceptualGameMode::Catch,
+            3 => ConceptualGameMode::Mania,
             _ => unreachable!(),
         })
         .mods(score.mods as u32)
@@ -92,7 +92,7 @@ async fn process_scores(
                     score,
                 )
                 .await
-            }
+            },
             _ => unreachable!(),
         };
 
