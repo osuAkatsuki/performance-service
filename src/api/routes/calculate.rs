@@ -1,7 +1,6 @@
 use crate::context::Context;
 use akatsuki_pp_rs::{Beatmap, BeatmapExt, GameMode, PerformanceAttributes};
 use axum::{extract::Extension, routing::post, Json, Router};
-use rkyv::result;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -150,7 +149,6 @@ async fn calculate_rosu_pp(beatmap_path: PathBuf, request: &CalculateRequest) ->
 }
 
 const RX: i32 = 1 << 7;
-const AP: i32 = 1 << 13;
 
 async fn download_beatmap(beatmap_path: PathBuf, request: &CalculateRequest) -> anyhow::Result<()> {
     let response = reqwest::get(&format!("https://old.ppy.sh/osu/{}", request.beatmap_id))

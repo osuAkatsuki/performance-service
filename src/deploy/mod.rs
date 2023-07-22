@@ -10,7 +10,6 @@ use std::{
     time::SystemTime,
 };
 
-use deadpool::managed::Manager;
 use std::io::Write;
 use tokio::fs::File;
 use tokio::sync::Mutex;
