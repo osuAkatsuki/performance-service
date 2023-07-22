@@ -25,6 +25,7 @@ use crate::{
 };
 
 use conceptual_rework::{Beatmap as ConceptualBeatmap, BeatmapExt as ConceptualBeatmapExt, GameMode as ConceptualGameMode};
+use skill_rebalance::{Beatmap as SkillRebalanceBeatmap, BeatmapExt as SkillRebalanceBeatmapExt, GameMode as SkillRebalanceGameMode};
 
 fn round(x: f32, decimals: u32) -> f32 {
     let y = 10i32.pow(decimals) as f32;
@@ -44,6 +45,35 @@ async fn calculate_conceptual_pp(beatmap_path: PathBuf, score: &RippleScore) -> 
             1 => ConceptualGameMode::Taiko,
             2 => ConceptualGameMode::Catch,
             3 => ConceptualGameMode::Mania,
+            _ => unreachable!(),
+        })
+        .mods(score.mods as u32)
+        .combo(score.max_combo as usize)
+        .accuracy(score.accuracy as f64)
+        .n_misses(score.count_misses as usize)
+        .calculate();
+
+    let mut pp = round(result.pp() as f32, 2);
+    if pp.is_infinite() || pp.is_nan() {
+        pp = 0.0;
+    }
+
+    pp
+}
+
+async fn calculate_skill_rebalance_pp(beatmap_path: PathBuf, score: &RippleScore) -> f32 {
+    let beatmap = match SkillRebalanceBeatmap::from_path(beatmap_path).await {
+        Ok(beatmap) => beatmap,
+        Err(_) => return 0.0,
+    };
+
+    let result = beatmap
+        .pp()
+        .mode(match score.play_mode {
+            0 => SkillRebalanceGameMode::Osu,
+            1 => SkillRebalanceGameMode::Taiko,
+            2 => SkillRebalanceGameMode::Catch,
+            3 => SkillRebalanceGameMode::Mania,
             _ => unreachable!(),
         })
         .mods(score.mods as u32)
@@ -93,6 +123,14 @@ async fn process_scores(
                 )
                 .await
             },
+            13 => {
+                calculate_skill_rebalance_pp(
+                    Path::new(&context.config.beatmaps_path)
+                        .join(format!("{}.osu", score.beatmap_id)),
+                    score,
+                )
+                .await
+            }
             _ => unreachable!(),
         };
 

@@ -38,7 +38,7 @@ akatsuki-pp-rs = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuk
 reqwest = "0.11"
 conceptual-rework = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", branch = "conceptual-rework", features = ["async_tokio"] }
 async-trait = "0.1.62"
-
+skill-rebalance = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", branch = "skill-rebalance", features = ["async_tokio"] }
 [profile.release]
 lto = "fat"
 codegen-units = 1
