@@ -27,7 +27,7 @@ async fn get_rework_scores(
 ) -> Json<Option<Vec<APIReworkScore>>> {
     let base_scores: Vec<APIBaseReworkScore> =
         sqlx::query_as(
-            "SELECT user_id, rework_scores.beatmap_id, beatmapset_id, rework_id, score_id, max_combo, mods, accuracy, score, num_300s, num_100s, num_50s, num_gekis, 
+            "SELECT user_id, rework_scores.beatmap_id, rework_scores.beatmapset_id, rework_id, score_id, max_combo, mods, accuracy, score, num_300s, num_100s, num_50s, num_gekis, 
             num_katus, num_misses, old_pp, new_pp, 
             DENSE_RANK() OVER (ORDER BY old_pp DESC) old_rank, DENSE_RANK() OVER (ORDER BY new_pp DESC) new_rank 
             FROM 
