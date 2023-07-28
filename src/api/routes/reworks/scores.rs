@@ -32,6 +32,8 @@ async fn get_rework_scores(
             DENSE_RANK() OVER (ORDER BY old_pp DESC) old_rank, DENSE_RANK() OVER (ORDER BY new_pp DESC) new_rank 
             FROM 
                 rework_scores 
+            INNER JOIN beatmaps
+                ON rework_scores.beatmap_id = beatmaps.beatmap_id
             WHERE 
                 user_id = ? AND rework_id = ?
             ORDER BY 
