@@ -24,7 +24,7 @@ async fn main() -> anyhow::Result<()> {
         .username(&config.database_username)
         .password(&config.database_password)
         .database(&config.database_name);
-    let database = DbPool::new(database_options);
+    let database = DbPool::new(database_options, config.database_pool_max_size);
 
     let amqp_url = amqp_dsn(
         &config.amqp_username,
@@ -33,7 +33,9 @@ async fn main() -> anyhow::Result<()> {
         config.amqp_port,
     );
     let amqp_manager = Manager::new(amqp_url, ConnectionProperties::default());
-    let amqp = Pool::builder(amqp_manager).max_size(10).build()?;
+    let amqp = Pool::builder(amqp_manager)
+        .max_size(config.amqp_pool_max_size)
+        .build()?;
     let amqp_channel = amqp.get().await?.create_channel().await?;
 
     let redis_connection_options = ConnectionInfo {

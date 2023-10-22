@@ -22,6 +22,9 @@ pub struct Config {
     pub database_name: String,
 
     #[clap(long, env)]
+    pub database_pool_max_size: usize,
+
+    #[clap(long, env)]
     pub amqp_host: String,
 
     #[clap(long, env)]
@@ -32,6 +35,9 @@ pub struct Config {
 
     #[clap(long, env)]
     pub amqp_password: String,
+
+    #[clap(long, env)]
+    pub amqp_pool_max_size: usize,
 
     #[clap(long, env)]
     pub redis_host: String,
