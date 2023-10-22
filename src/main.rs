@@ -4,7 +4,12 @@ use lapin::ConnectionProperties;
 use performance_service::{
     api, config::Config, context::Context, deploy, mass_recalc, models::pool::DbPool, processor,
 };
-use redis::Client;
+use redis::{Client, ConnectionAddr, ConnectionInfo, RedisConnectionInfo};
+use sqlx::mysql::MySqlConnectOptions;
+
+fn amqp_dsn(username: &str, password: &str, host: &str, port: u16) -> String {
+    return format!("amqp://{}:{}@{}:{}", username, password, host, port);
+}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -13,13 +18,33 @@ async fn main() -> anyhow::Result<()> {
 
     let config = Config::parse();
 
-    let database = DbPool::new(config.database_url.clone());
+    let database_options = MySqlConnectOptions::new()
+        .host(&config.database_host)
+        .port(config.database_port)
+        .username(&config.database_username)
+        .password(&config.database_password)
+        .database(&config.database_name);
+    let database = DbPool::new(database_options);
 
-    let amqp_manager = Manager::new(config.amqp_url.clone(), ConnectionProperties::default());
+    let amqp_url = amqp_dsn(
+        &config.amqp_username,
+        &config.amqp_password,
+        &config.amqp_host,
+        config.amqp_port,
+    );
+    let amqp_manager = Manager::new(amqp_url, ConnectionProperties::default());
     let amqp = Pool::builder(amqp_manager).max_size(10).build()?;
     let amqp_channel = amqp.get().await?.create_channel().await?;
 
-    let redis = Client::open(config.redis_url.clone())?;
+    let redis_connection_options = ConnectionInfo {
+        addr: ConnectionAddr::Tcp(config.redis_host.clone(), config.redis_port),
+        redis: RedisConnectionInfo {
+            db: config.redis_database,
+            password: config.redis_password.clone(),
+            username: config.redis_username.clone(),
+        },
+    };
+    let redis = Client::open(redis_connection_options)?;
 
     let context = Context {
         config,

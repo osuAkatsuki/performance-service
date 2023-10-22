@@ -1,24 +1,23 @@
-FROM rust:latest as build
-
-RUN USER=root cargo new --bin performance-service
+FROM lukemathwalker/cargo-chef:latest-rust-bookworm AS chef
 WORKDIR /performance-service
 
-COPY ./Cargo.lock ./Cargo.lock
-COPY ./Cargo.toml ./Cargo.toml
-COPY ./build.rs ./build.rs
+FROM chef AS prepare
+COPY . .
+RUN cargo chef prepare --recipe-path recipe.json
 
-RUN cargo build --release & rm src/*.rs & rm migrations/*.sql
+FROM chef AS cook
+COPY --from=prepare /performance-service/recipe.json recipe.json
+RUN cargo chef cook --release --recipe-path recipe.json
+COPY . .
+RUN cargo build --release --bin performance-service
 
-COPY ./src ./src
-COPY ./migrations ./migrations
+FROM debian:bookworm-slim AS runtime
+WORKDIR /performance-service
 
-RUN rm ./target/release/deps/performance-service*
-RUN cargo build --release
+COPY scripts /scripts
+COPY migrations /migrations
 
-RUN cargo install sqlx-cli --features mysql
-RUN sqlx migrate run --ignore-missing
+RUN apt-get update && apt install -y openssl
 
-FROM debian:buster-slim
-
-COPY --from=build /performance-service/target/release/performance-service .
-CMD ["./performance-service"]
+COPY --from=cook /performance-service/target/release/performance-service /usr/local/bin
+CMD ["/scripts/bootstrap.sh"]
