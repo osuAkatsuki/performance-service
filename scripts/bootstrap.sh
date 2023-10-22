@@ -12,7 +12,7 @@ if [ -z "$APP_COMPONENT" ]; then
 fi
 
 if [[ $PULL_SECRETS_FROM_VAULT -eq 1 ]]; then
-  pip install -i $PYPI_INDEX_URL akatsuki-cli
+  pip install --break-system-packages -i $PYPI_INDEX_URL akatsuki-cli
   akatsuki vault get performance-service $APP_ENV -o .env
   source .env
 fi

@@ -17,7 +17,7 @@ WORKDIR /performance-service
 COPY scripts /scripts
 COPY migrations /migrations
 
-RUN apt-get update && apt install -y openssl
+RUN apt-get update && apt install -y openssl python3-pip
 
 COPY --from=cook /performance-service/target/release/performance-service /usr/local/bin
 CMD ["/scripts/bootstrap.sh"]
