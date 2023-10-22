@@ -19,7 +19,7 @@ jobs:
           script_stop: true
           script: |
             cd /home/akatsuki/performance-service
-            git pull origin master
+            git pull origin main
             docker build -t performance-service:latest .
             cd /home/akatsuki/workbench
             docker-compose restart performance-service-api performance-service-processor
