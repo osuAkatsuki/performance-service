@@ -7,7 +7,8 @@ use performance_service::{
 };
 use redis::{Client, ConnectionAddr, ConnectionInfo, RedisConnectionInfo};
 use s3::{creds::Credentials, Bucket, Region};
-use sqlx::mysql::MySqlConnectOptions;
+use sqlx::{mysql::MySqlConnectOptions, ConnectOptions};
+use structured_logger::{async_json::new_writer, Builder};
 
 fn amqp_dsn(username: &str, password: &str, host: &str, port: u16) -> String {
     return format!("amqp://{}:{}@{}:{}", username, password, host, port);
@@ -16,7 +17,10 @@ fn amqp_dsn(username: &str, password: &str, host: &str, port: u16) -> String {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenv::dotenv().ok();
-    env_logger::init();
+
+    Builder::new()
+        .with_target_writer("*", new_writer(tokio::io::stdout()))
+        .init();
 
     let config = Config::parse();
 
@@ -25,7 +29,9 @@ async fn main() -> anyhow::Result<()> {
         .port(config.database_port)
         .username(&config.database_username)
         .password(&config.database_password)
-        .database(&config.database_name);
+        .database(&config.database_name)
+        .disable_statement_logging()
+        .clone();
     let database = DbPool::new(database_options, config.database_pool_max_size)?;
 
     let amqp_url = amqp_dsn(
@@ -41,7 +47,14 @@ async fn main() -> anyhow::Result<()> {
     let amqp_channel = amqp.get().await?.create_channel().await?;
 
     let redis_connection_options = ConnectionInfo {
-        addr: ConnectionAddr::Tcp(config.redis_host.clone(), config.redis_port),
+        addr: match config.redis_use_ssl {
+            true => ConnectionAddr::TcpTls {
+                host: config.redis_host.clone(),
+                port: config.redis_port,
+                insecure: false,
+            },
+            false => ConnectionAddr::Tcp(config.redis_host.clone(), config.redis_port),
+        },
         redis: RedisConnectionInfo {
             db: config.redis_database,
             password: config.redis_password.clone(),
