@@ -1,10 +1,8 @@
 use crate::context::Context;
+use crate::usecases;
 use akatsuki_pp_rs::{Beatmap, BeatmapExt, GameMode, PerformanceAttributes};
 use axum::{extract::Extension, routing::post, Json, Router};
-use std::io::Cursor;
-use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tokio::fs::File;
 
 pub fn router() -> Router {
     Router::new().route("/api/v1/calculate", post(calculate_play))
@@ -35,21 +33,12 @@ fn round(x: f32, decimals: u32) -> f32 {
 }
 
 async fn calculate_relax_pp(
-    beatmap_path: PathBuf,
     request: &CalculateRequest,
-) -> CalculateResponse {
-    let beatmap = match Beatmap::from_path(beatmap_path).await {
-        Ok(beatmap) => beatmap,
-        Err(_) => {
-            return CalculateResponse {
-                stars: 0.0,
-                pp: 0.0,
-                ar: 0.0,
-                od: 0.0,
-                max_combo: 0,
-            }
-        }
-    };
+    context: Arc<Context>,
+) -> anyhow::Result<CalculateResponse> {
+    let beatmap_bytes =
+        usecases::beatmaps::fetch_beatmap_osu_file(request.beatmap_id, context).await?;
+    let beatmap = Beatmap::from_bytes(&beatmap_bytes).await?;
 
     let result = akatsuki_pp_rs::osu_2019::OsuPP::new(&beatmap)
         .mods(request.mods as u32)
@@ -60,36 +49,32 @@ async fn calculate_relax_pp(
 
     let mut pp = round(result.pp as f32, 2);
     if pp.is_infinite() || pp.is_nan() {
+        log::warn!("Calculated pp is infinite or NaN, setting to 0");
         pp = 0.0;
     }
 
     let mut stars = round(result.difficulty.stars as f32, 2);
     if stars.is_infinite() || stars.is_nan() {
+        log::warn!("Calculated star rating is infinite or NaN, setting to 0");
         stars = 0.0;
     }
 
-    CalculateResponse {
+    Ok(CalculateResponse {
         stars,
         pp,
         ar: result.difficulty.ar as f32,
         od: result.difficulty.od as f32,
         max_combo: result.difficulty.max_combo as i32,
-    }
+    })
 }
 
-async fn calculate_rosu_pp(beatmap_path: PathBuf, request: &CalculateRequest) -> CalculateResponse {
-    let beatmap = match Beatmap::from_path(beatmap_path).await {
-        Ok(beatmap) => beatmap,
-        Err(_) => {
-            return CalculateResponse {
-                stars: 0.0,
-                pp: 0.0,
-                ar: 0.0,
-                od: 0.0,
-                max_combo: 0,
-            }
-        }
-    };
+async fn calculate_rosu_pp(
+    request: &CalculateRequest,
+    context: Arc<Context>,
+) -> anyhow::Result<CalculateResponse> {
+    let beatmap_bytes =
+        usecases::beatmaps::fetch_beatmap_osu_file(request.beatmap_id, context).await?;
+    let beatmap = Beatmap::from_bytes(&beatmap_bytes).await?;
 
     let result = beatmap
         .pp()
@@ -108,15 +93,17 @@ async fn calculate_rosu_pp(beatmap_path: PathBuf, request: &CalculateRequest) ->
 
     let mut pp = round(result.pp() as f32, 2);
     if pp.is_infinite() || pp.is_nan() {
+        log::warn!("Calculated pp is infinite or NaN, setting to 0");
         pp = 0.0;
     }
 
     let mut stars = round(result.stars() as f32, 2);
     if stars.is_infinite() || stars.is_nan() {
+        log::warn!("Calculated star rating is infinite or NaN, setting to 0");
         stars = 0.0;
     }
 
-    match result {
+    Ok(match result {
         PerformanceAttributes::Osu(result) => CalculateResponse {
             stars,
             pp,
@@ -145,22 +132,10 @@ async fn calculate_rosu_pp(beatmap_path: PathBuf, request: &CalculateRequest) ->
             od: 0.0,
             max_combo: result.difficulty.max_combo as i32,
         },
-    }
+    })
 }
 
 const RX: i32 = 1 << 7;
-
-async fn download_beatmap(beatmap_path: PathBuf, request: &CalculateRequest) -> anyhow::Result<()> {
-    let response = reqwest::get(&format!("https://old.ppy.sh/osu/{}", request.beatmap_id))
-        .await?
-        .error_for_status()?;
-
-    let mut file = File::create(&beatmap_path).await?;
-    let mut content = Cursor::new(response.bytes().await?);
-    tokio::io::copy(&mut content, &mut file).await?;
-
-    Ok(())
-}
 
 async fn calculate_play(
     Extension(ctx): Extension<Arc<Context>>,
@@ -169,32 +144,37 @@ async fn calculate_play(
     let mut results = Vec::new();
 
     for request in requests {
-        let beatmap_path =
-            Path::new(&ctx.config.beatmaps_path).join(format!("{}.osu", request.beatmap_id));
-
-        if !beatmap_path.exists() {
-            match download_beatmap(beatmap_path.clone(), &request).await {
-                Ok(_) => {}
-                Err(_) => {
-                    results.push(CalculateResponse {
-                        stars: 0.0,
-                        pp: 0.0,
-                        ar: 0.0,
-                        od: 0.0,
-                        max_combo: 0,
-                    });
-
-                    continue;
-                }
-            }
-        }
-
-        let result = if request.mods & RX > 0 && request.mode == 0 {
-            calculate_relax_pp(beatmap_path, &request).await
+        let raw_result = if request.mods & RX > 0 && request.mode == 0 {
+            calculate_relax_pp(&request, ctx.clone()).await
         } else {
-            calculate_rosu_pp(beatmap_path, &request).await
+            calculate_rosu_pp(&request, ctx.clone()).await
         };
 
+        let result = match raw_result {
+            Ok(result) => result,
+            Err(e) => {
+                log::error!(
+                    beatmap_id = request.beatmap_id,
+                    error = e.to_string();
+                    "Performance calculation failed for beatmap",
+                );
+
+                CalculateResponse {
+                    stars: 0.0,
+                    pp: 0.0,
+                    ar: 0.0,
+                    od: 0.0,
+                    max_combo: 0,
+                }
+            }
+        };
+
+        log::info!(
+            performance_points = result.pp,
+            star_rating = result.stars,
+            beatmap_id = request.beatmap_id;
+            "Calculated performance for beatmap.",
+        );
         results.push(result);
     }
 

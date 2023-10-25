@@ -1,17 +1,9 @@
-use crate::{context::Context, models::score::RippleScore};
+use crate::{context::Context, models::score::RippleScore, usecases};
 use akatsuki_pp_rs::{Beatmap, BeatmapExt, GameMode};
 use redis::AsyncCommands;
-use std::{
-    collections::HashMap,
-    io::Cursor,
-    ops::DerefMut,
-    path::{Path, PathBuf},
-    sync::Arc,
-    time::SystemTime,
-};
+use std::{collections::HashMap, ops::DerefMut, sync::Arc, time::SystemTime};
 
 use std::io::Write;
-use tokio::fs::File;
 use tokio::sync::Mutex;
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -39,10 +31,10 @@ const RX: i32 = 1 << 7;
 const AP: i32 = 1 << 13;
 
 async fn calculate_special_pp(
-    beatmap_path: PathBuf,
     request: &CalculateRequest,
+    context: Arc<Context>,
     recalc_ctx: &Arc<Mutex<RecalculateContext>>,
-) -> CalculateResponse {
+) -> anyhow::Result<CalculateResponse> {
     let mut recalc_mutex = recalc_ctx.lock().await;
 
     let beatmap = if recalc_mutex.beatmaps.contains_key(&request.beatmap_id) {
@@ -52,21 +44,15 @@ async fn calculate_special_pp(
             .unwrap()
             .clone()
     } else {
-        match Beatmap::from_path(beatmap_path).await {
-            Ok(beatmap) => {
-                recalc_mutex
-                    .beatmaps
-                    .insert(request.beatmap_id, beatmap.clone());
+        let beatmap_bytes =
+            usecases::beatmaps::fetch_beatmap_osu_file(request.beatmap_id, context.clone()).await?;
+        let beatmap = Beatmap::from_bytes(&beatmap_bytes).await?;
 
-                beatmap
-            }
-            Err(_) => {
-                return CalculateResponse {
-                    stars: 0.0,
-                    pp: 0.0,
-                }
-            }
-        }
+        recalc_mutex
+            .beatmaps
+            .insert(request.beatmap_id, beatmap.clone());
+
+        beatmap
     };
 
     drop(recalc_mutex);
@@ -88,14 +74,14 @@ async fn calculate_special_pp(
         stars = 0.0;
     }
 
-    CalculateResponse { stars, pp }
+    Ok(CalculateResponse { stars, pp })
 }
 
 async fn calculate_rosu_pp(
-    beatmap_path: PathBuf,
     request: &CalculateRequest,
+    context: Arc<Context>,
     recalc_ctx: &Arc<Mutex<RecalculateContext>>,
-) -> CalculateResponse {
+) -> anyhow::Result<CalculateResponse> {
     let mut recalc_mutex = recalc_ctx.lock().await;
 
     let beatmap = if recalc_mutex.beatmaps.contains_key(&request.beatmap_id) {
@@ -105,21 +91,15 @@ async fn calculate_rosu_pp(
             .unwrap()
             .clone()
     } else {
-        match Beatmap::from_path(beatmap_path).await {
-            Ok(beatmap) => {
-                recalc_mutex
-                    .beatmaps
-                    .insert(request.beatmap_id, beatmap.clone());
+        let beatmap_bytes =
+            usecases::beatmaps::fetch_beatmap_osu_file(request.beatmap_id, context.clone()).await?;
+        let beatmap = Beatmap::from_bytes(&beatmap_bytes).await?;
 
-                beatmap
-            }
-            Err(_) => {
-                return CalculateResponse {
-                    stars: 0.0,
-                    pp: 0.0,
-                }
-            }
-        }
+        recalc_mutex
+            .beatmaps
+            .insert(request.beatmap_id, beatmap.clone());
+
+        beatmap
     };
 
     drop(recalc_mutex);
@@ -149,12 +129,11 @@ async fn calculate_rosu_pp(
         stars = 0.0;
     }
 
-    CalculateResponse { stars, pp }
+    Ok(CalculateResponse { stars, pp })
 }
 
 async fn recalculate_score(
     score: RippleScore,
-    beatmap_path: PathBuf,
     ctx: Arc<Context>,
     recalc_ctx: Arc<Mutex<RecalculateContext>>,
 ) -> anyhow::Result<()> {
@@ -168,9 +147,9 @@ async fn recalculate_score(
     };
 
     let response = if score.mods & RX > 0 && score.play_mode == 0 {
-        calculate_special_pp(beatmap_path, &request, &recalc_ctx).await
+        calculate_special_pp(&request, ctx.clone(), &recalc_ctx).await?
     } else {
-        calculate_rosu_pp(beatmap_path, &request, &recalc_ctx).await
+        calculate_rosu_pp(&request, ctx.clone(), &recalc_ctx).await?
     };
 
     let rx = if score.mods & RX > 0 {
@@ -214,11 +193,11 @@ async fn recalculate_score(
     }
 
     log::info!(
-        "Recalculated score ID {} (mode: {}) | {} -> {}",
-        score.id,
-        score.play_mode,
-        score.pp,
-        response.pp,
+        score_id = score.id,
+        score_mode = score.play_mode,
+        old_pp = score.pp,
+        new_pp = score.pp;
+        "Recalculated score",
     );
 
     Ok(())
@@ -241,7 +220,7 @@ async fn recalculate_mode_scores(
         &format!(
             "SELECT s.id, s.beatmap_md5, s.userid, s.score, s.max_combo, s.full_combo, s.mods, s.300_count, 
             s.100_count, s.50_count, s.katus_count, s.gekis_count, s.misses_count, s.time, s.play_mode, s.completed, 
-            s.accuracy, s.pp, s.checksum, s.patcher, s.pinned, b.beatmap_id, b.beatmapset_id 
+            s.accuracy, s.pp, s.checksum, s.patcher, s.pinned, b.beatmap_id, b.beatmapset_id, b.song_name  
             FROM {} s 
             INNER JOIN 
                 beatmaps b 
@@ -261,31 +240,7 @@ async fn recalculate_mode_scores(
         let mut futures = Vec::new();
 
         for score in score_chunk {
-            let beatmap_path =
-                Path::new(&ctx.config.beatmaps_path).join(format!("{}.osu", score.beatmap_id));
-
-            if !beatmap_path.exists() {
-                log::info!(
-                    "Beatmap {} doesn't exist, fetching from bancho",
-                    score.beatmap_id
-                );
-
-                let response =
-                    reqwest::get(&format!("https://old.ppy.sh/osu/{}", score.beatmap_id))
-                        .await?
-                        .error_for_status()?;
-
-                let mut file = File::create(&beatmap_path).await?;
-                let mut content = Cursor::new(response.bytes().await?);
-                tokio::io::copy(&mut content, &mut file).await?;
-            }
-
-            let future = tokio::spawn(recalculate_score(
-                score,
-                beatmap_path,
-                ctx.clone(),
-                recalc_ctx.clone(),
-            ));
+            let future = tokio::spawn(recalculate_score(score, ctx.clone(), recalc_ctx.clone()));
             futures.push(future);
         }
 
@@ -422,7 +377,7 @@ async fn recalculate_user(
         &format!(
             "SELECT s.id, s.beatmap_md5, s.userid, s.score, s.max_combo, s.full_combo, s.mods, s.300_count, 
             s.100_count, s.50_count, s.katus_count, s.gekis_count, s.misses_count, s.time, s.play_mode, s.completed, 
-            s.accuracy, s.pp, s.checksum, s.patcher, s.pinned, b.beatmap_id, b.beatmapset_id 
+            s.accuracy, s.pp, s.checksum, s.patcher, s.pinned, b.beatmap_id, b.beatmapset_id, b.song_name 
             FROM {} s 
             INNER JOIN 
                 beatmaps b 
@@ -495,14 +450,12 @@ async fn recalculate_user(
     .bind(user_id)
     .bind(mode)
     .fetch_optional(ctx.database.get().await?.deref_mut())
-    .await
-    .unwrap_or(None);
+    .await?;
 
     let inactive_days = match last_score_time {
         Some(time) => {
             ((SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .unwrap()
+                .duration_since(SystemTime::UNIX_EPOCH)?
                 .as_secs() as i32)
                 - time)
                 / 60
@@ -550,11 +503,11 @@ async fn recalculate_user(
         .await?;
 
     log::info!(
-        "Recalculated user {} in mode {} (rx: {}) | pp: {}",
-        user_id,
-        mode,
-        rx,
-        new_pp
+        user_id = user_id,
+        mode = mode,
+        relax = rx,
+        new_pp = new_pp;
+        "Recalculated user",
     );
 
     Ok(())
@@ -585,32 +538,32 @@ struct RecalculateContext {
 
 pub async fn serve(context: Context) -> anyhow::Result<()> {
     print!("Enter the modes (comma delimited) to deploy: ");
-    std::io::stdout().flush().unwrap();
+    std::io::stdout().flush()?;
 
     let mut modes_str = String::new();
     std::io::stdin().read_line(&mut modes_str)?;
     let modes = modes_str
         .trim()
         .split(',')
-        .map(|s| s.parse::<i32>().unwrap())
+        .map(|s| s.parse::<i32>().expect("failed to parse mode"))
         .collect::<Vec<_>>();
 
     print!("\n");
-    std::io::stdout().flush().unwrap();
+    std::io::stdout().flush()?;
 
     print!("Enter the relax bits (comma delimited) to deploy: ");
-    std::io::stdout().flush().unwrap();
+    std::io::stdout().flush()?;
 
     let mut relax_str = String::new();
     std::io::stdin().read_line(&mut relax_str)?;
     let relax_bits = relax_str
         .trim()
         .split(',')
-        .map(|s| s.parse::<i32>().unwrap())
+        .map(|s| s.parse::<i32>().expect("failed to parse relax bits"))
         .collect::<Vec<_>>();
 
     print!("\n");
-    std::io::stdout().flush().unwrap();
+    std::io::stdout().flush()?;
 
     let recalculate_context = Arc::new(Mutex::new(RecalculateContext {
         beatmaps: HashMap::new(),

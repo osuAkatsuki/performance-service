@@ -6,6 +6,7 @@ use tower_http::trace::TraceLayer;
 
 use crate::context::Context;
 
+mod error;
 mod routes;
 
 fn api_router() -> Router {
@@ -17,10 +18,12 @@ fn api_router() -> Router {
         .merge(routes::reworks::leaderboard::router())
         .merge(routes::reworks::sessions::router())
         .merge(routes::reworks::search::router())
+        .merge(routes::health::router())
 }
 
 pub async fn serve(ctx: Context) -> anyhow::Result<()> {
     let server_port = ctx.config.api_port.unwrap();
+    let server_host = ctx.config.api_host.clone().unwrap();
 
     let app = api_router().layer(
         ServiceBuilder::new()
@@ -28,8 +31,11 @@ pub async fn serve(ctx: Context) -> anyhow::Result<()> {
             .layer(AddExtensionLayer::new(Arc::new(ctx))),
     );
 
-    log::info!("serving on {}", server_port);
-    axum::Server::bind(&format!("127.0.0.1:{}", server_port).parse()?)
+    log::info!(
+        port = server_port;
+        "Serving API",
+    );
+    axum::Server::bind(&format!("{}:{}", server_host, server_port).parse()?)
         .serve(app.into_make_service())
         .await?;
 

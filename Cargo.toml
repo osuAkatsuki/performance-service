@@ -14,14 +14,17 @@ dotenv = "0.15.0"
 clap = { version = "3.0.0-beta.5", features = ["derive", "env"] }
 serde = { version = "1.0.130", features = ["derive"] }
 serde_json = "1.0.87"
-env_logger = "0.9.0"
 anyhow = "1.0.48"
 log = "0.4.14"
 tower = "0.4.11"
 tower-http = { version = "0.2.0", features = ["trace"] }
 axum = { version = "0.3.4", features = ["tower-log"] }
 chrono = { version = "0.4.22", features = ["serde"] }
-sqlx = { version = "0.6.2", features = ["runtime-tokio-native-tls", "mysql", "chrono"] }
+sqlx = { version = "0.6.2", features = [
+    "runtime-tokio-native-tls",
+    "mysql",
+    "chrono",
+] }
 lapin = "2.1.1"
 deadpool = { version = "0.9.5", features = ["rt_tokio_1"] }
 deadpool-lapin = "0.10.0"
@@ -34,12 +37,25 @@ bcrypt = "0.13.0"
 uuid = { version = "1.2.1", features = ["v4"] }
 futures = "0.3.17"
 strsim = "0.10.0"
-akatsuki-pp-rs = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "764da0dbf42ed80441acf99d070aaedabaed4b75", features = ["async_tokio"] }
+akatsuki-pp-rs = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "764da0dbf42ed80441acf99d070aaedabaed4b75", features = [
+    "async_tokio",
+] }
 reqwest = "0.11"
-conceptual-rework = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", branch = "conceptual-rework", features = ["async_tokio"] }
+conceptual-rework = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", branch = "conceptual-rework", features = [
+    "async_tokio",
+] }
 async-trait = "0.1.62"
-skill-rebalance = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", branch = "skill-rebalance", features = ["async_tokio"] }
+skill-rebalance = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", branch = "skill-rebalance", features = [
+    "async_tokio",
+] }
+rust-s3 = "0.33.0"
+structured-logger = "1.0.3"
+the = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "4ae182f4f294e6ac34eca1dc2e5f676748c4fd76", features = [
+    "async_tokio",
+] }
+
 [profile.release]
 lto = "fat"
-codegen-units = 1
+codegen-units = 16
+opt-level = 3
 panic = "abort"

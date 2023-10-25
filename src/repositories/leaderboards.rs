@@ -32,8 +32,7 @@ impl LeaderboardsRepository {
             sqlx::query_scalar("SELECT COUNT(*) FROM rework_stats WHERE rework_id = ?")
                 .bind(rework.rework_id)
                 .fetch_one(self.context.database.get().await?.deref_mut())
-                .await
-                .unwrap();
+                .await?;
 
         let rework_users: Vec<APIReworkStats> = sqlx::query_as(
             "SELECT user_id, users_stats.country, users.username user_name, rework_id, old_pp, new_pp, 
@@ -56,8 +55,7 @@ impl LeaderboardsRepository {
             .bind(offset)
             .bind(limit)
             .fetch_all(self.context.database.get().await?.deref_mut())
-            .await
-            .unwrap();
+            .await?;
 
         let leaderboard = Leaderboard {
             total_count: leaderboard_count,

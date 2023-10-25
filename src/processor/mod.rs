@@ -1,9 +1,4 @@
-use std::{
-    ops::DerefMut,
-    path::{Path, PathBuf},
-    sync::Arc,
-    time::Duration,
-};
+use std::{ops::DerefMut, sync::Arc, time::Duration};
 
 use lapin::{
     options::{BasicAckOptions, BasicConsumeOptions, QueueDeclareOptions},
@@ -24,19 +19,28 @@ use crate::{
     usecases,
 };
 
-use conceptual_rework::{Beatmap as ConceptualBeatmap, BeatmapExt as ConceptualBeatmapExt, GameMode as ConceptualGameMode};
-use skill_rebalance::{Beatmap as SkillRebalanceBeatmap, BeatmapExt as SkillRebalanceBeatmapExt, GameMode as SkillRebalanceGameMode};
+use conceptual_rework::{
+    Beatmap as ConceptualBeatmap, BeatmapExt as ConceptualBeatmapExt,
+    GameMode as ConceptualGameMode,
+};
+use skill_rebalance::{
+    Beatmap as SkillRebalanceBeatmap, BeatmapExt as SkillRebalanceBeatmapExt,
+    GameMode as SkillRebalanceGameMode,
+};
+use the::Beatmap as TheBeatmap;
 
 fn round(x: f32, decimals: u32) -> f32 {
     let y = 10i32.pow(decimals) as f32;
     (x * y).round() / y
 }
 
-async fn calculate_conceptual_pp(beatmap_path: PathBuf, score: &RippleScore) -> f32 {
-    let beatmap = match ConceptualBeatmap::from_path(beatmap_path).await {
-        Ok(beatmap) => beatmap,
-        Err(_) => return 0.0,
-    };
+async fn calculate_conceptual_pp(
+    score: &RippleScore,
+    context: Arc<Context>,
+) -> anyhow::Result<f32> {
+    let beatmap_bytes =
+        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, context).await?;
+    let beatmap = ConceptualBeatmap::from_bytes(&beatmap_bytes).await?;
 
     let result = beatmap
         .pp()
@@ -58,14 +62,16 @@ async fn calculate_conceptual_pp(beatmap_path: PathBuf, score: &RippleScore) -> 
         pp = 0.0;
     }
 
-    pp
+    Ok(pp)
 }
 
-async fn calculate_skill_rebalance_pp(beatmap_path: PathBuf, score: &RippleScore) -> f32 {
-    let beatmap = match SkillRebalanceBeatmap::from_path(beatmap_path).await {
-        Ok(beatmap) => beatmap,
-        Err(_) => return 0.0,
-    };
+async fn calculate_skill_rebalance_pp(
+    score: &RippleScore,
+    context: Arc<Context>,
+) -> anyhow::Result<f32> {
+    let beatmap_bytes =
+        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, context).await?;
+    let beatmap = SkillRebalanceBeatmap::from_bytes(&beatmap_bytes).await?;
 
     let result = beatmap
         .pp()
@@ -87,54 +93,50 @@ async fn calculate_skill_rebalance_pp(beatmap_path: PathBuf, score: &RippleScore
         pp = 0.0;
     }
 
-    pp
+    Ok(pp)
+}
+
+async fn calculate_the_pp(score: &RippleScore, context: Arc<Context>) -> anyhow::Result<f32> {
+    let beatmap_bytes =
+        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, context).await?;
+    let beatmap = TheBeatmap::from_bytes(&beatmap_bytes).await?;
+
+    let result = the::osu_2019::OsuPP::new(&beatmap)
+        .mods(score.mods as u32)
+        .combo(score.max_combo as usize)
+        .misses(score.count_misses as usize)
+        .accuracy(score.accuracy)
+        .calculate();
+
+    let mut pp = round(result.pp as f32, 2);
+    if pp.is_infinite() || pp.is_nan() {
+        pp = 0.0;
+    }
+
+    Ok(pp)
 }
 
 async fn process_scores(
     rework: &Rework,
     scores: Vec<RippleScore>,
-    context: &Arc<Context>,
+    context: Arc<Context>,
 ) -> anyhow::Result<Vec<ReworkScore>> {
     let mut rework_scores: Vec<ReworkScore> = Vec::new();
 
     for score in &scores {
         let new_pp = match rework.rework_id {
-            10 => {
-                calculate_conceptual_pp(
-                    Path::new(&context.config.beatmaps_path)
-                        .join(format!("{}.osu", score.beatmap_id)),
-                    score,
-                )
-                .await
-            }
-            11 => {
-                calculate_conceptual_pp(
-                    Path::new(&context.config.beatmaps_path)
-                        .join(format!("{}.osu", score.beatmap_id)),
-                    score,
-                )
-                .await
-            }
-            12 => {
-                calculate_conceptual_pp(
-                    Path::new(&context.config.beatmaps_path)
-                        .join(format!("{}.osu", score.beatmap_id)),
-                    score,
-                )
-                .await
-            },
-            13 => {
-                calculate_skill_rebalance_pp(
-                    Path::new(&context.config.beatmaps_path)
-                        .join(format!("{}.osu", score.beatmap_id)),
-                    score,
-                )
-                .await
-            }
+            10 => calculate_conceptual_pp(score, context.clone()).await?,
+            11 => calculate_conceptual_pp(score, context.clone()).await?,
+            12 => calculate_conceptual_pp(score, context.clone()).await?,
+            13 => calculate_skill_rebalance_pp(score, context.clone()).await?,
+            14 => calculate_the_pp(score, context.clone()).await?,
             _ => unreachable!(),
         };
 
-        log::info!("Recalculated PP for score ID {}", score.id);
+        log::info!(
+            score_id = score.id;
+            "Recalculated PP for score",
+        );
 
         let rework_score = ReworkScore::from_ripple_score(score, rework.rework_id, new_pp);
         rework_scores.push(rework_score);
@@ -161,10 +163,12 @@ async fn handle_queue_request(
     context: Arc<Context>,
     delivery_tag: u64,
 ) -> anyhow::Result<()> {
-    let rework = usecases::reworks::fetch_one(request.rework_id, context.clone())
-        .await?
-        .unwrap();
+    let rework = usecases::reworks::fetch_one(request.rework_id, context.clone()).await?;
+    if rework.is_none() {
+        anyhow::bail!("failed to find rework");
+    }
 
+    let rework = rework.unwrap();
     let scores_table = match rework.rx {
         0 => "scores",
         1 => "scores_relax",
@@ -176,7 +180,7 @@ async fn handle_queue_request(
         &format!(
             "SELECT s.id, s.beatmap_md5, s.userid, s.score, s.max_combo, s.full_combo, s.mods, s.300_count, 
             s.100_count, s.50_count, s.katus_count, s.gekis_count, s.misses_count, s.time, s.play_mode, s.completed, 
-            s.accuracy, s.pp, s.checksum, s.patcher, s.pinned, b.beatmap_id, b.beatmapset_id 
+            s.accuracy, s.pp, s.checksum, s.patcher, s.pinned, b.beatmap_id, b.beatmapset_id, b.song_name 
             FROM {} s 
             INNER JOIN 
                 beatmaps b 
@@ -207,7 +211,7 @@ async fn handle_queue_request(
         .fetch_one(context.database.get().await?.deref_mut())
         .await?;
 
-    let rework_scores = process_scores(&rework, scores, &context).await?;
+    let rework_scores = process_scores(&rework, scores, context.clone()).await?;
     let new_pp = calculate_new_pp(&rework_scores, score_count);
 
     for rework_score in rework_scores {
@@ -298,9 +302,9 @@ async fn handle_queue_request(
         .await?;
 
     log::info!(
-        "Processed recalculation for user ID {} on rework {}",
-        request.user_id,
-        rework.rework_name
+        user_id = request.user_id,
+        rework_name = rework.rework_name;
+        "Processed recalculation for user on rework",
     );
 
     Ok(())
@@ -330,14 +334,13 @@ async fn rmq_listen(context: Arc<Context>) -> anyhow::Result<()> {
         if let Ok(delivery) = delivery {
             let deserialized_data: QueueRequest =
                 rkyv::check_archived_root::<QueueRequest>(&delivery.data)
-                    .unwrap()
-                    .deserialize(&mut rkyv::Infallible)
-                    .unwrap();
+                    .expect("failed to check archived root?")
+                    .deserialize(&mut rkyv::Infallible)?;
 
             log::info!(
-                "Received recalculation request for user ID {} on rework ID {}",
-                deserialized_data.user_id,
-                deserialized_data.rework_id
+                user_id = deserialized_data.user_id,
+                rework_id = deserialized_data.rework_id;
+                "Received recalculation request for user on rework",
             );
 
             let context_clone = context.clone();
@@ -350,7 +353,7 @@ async fn rmq_listen(context: Arc<Context>) -> anyhow::Result<()> {
                 .await;
 
                 if result.is_err() {
-                    panic!("Error processing queue request: {:?}", result);
+                    log::error!(error = result.unwrap_err().to_string(); "Error processing queue request");
                 }
             });
         }

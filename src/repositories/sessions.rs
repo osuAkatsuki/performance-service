@@ -16,8 +16,7 @@ impl SessionsRepository {
         let mut redis_conn = self.context.redis.get_async_connection().await?;
         let mut session_token: Option<String> = redis_conn
             .get(format!("rework:sessions:ids:{}", user_id))
-            .await
-            .unwrap_or(None);
+            .await?;
 
         if session_token.is_none() {
             session_token = Some(Uuid::new_v4().to_string());
@@ -28,8 +27,7 @@ impl SessionsRepository {
                     session_token.clone().unwrap(),
                     3600 * 2, // 2 hours
                 )
-                .await
-                .unwrap();
+                .await?;
 
             let _: () = redis_conn
                 .set_ex(
@@ -37,8 +35,7 @@ impl SessionsRepository {
                     user_id,
                     3600 * 2, // 2 hours
                 )
-                .await
-                .unwrap();
+                .await?;
         }
 
         Ok(session_token.unwrap())
@@ -48,8 +45,7 @@ impl SessionsRepository {
         let mut connection = self.context.redis.get_async_connection().await?;
         let user_id: Option<i32> = connection
             .get(format!("rework:sessions:{}", session_token))
-            .await
-            .unwrap();
+            .await?;
 
         if user_id.is_none() {
             return Ok(());
@@ -59,13 +55,11 @@ impl SessionsRepository {
 
         let _: () = connection
             .del(format!("rework:sessions:{}", session_token))
-            .await
-            .unwrap();
+            .await?;
 
         let _: () = connection
             .del(format!("rework:sessions:ids:{}", user_id))
-            .await
-            .unwrap();
+            .await?;
 
         Ok(())
     }
