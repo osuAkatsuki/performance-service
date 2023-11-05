@@ -21,6 +21,7 @@ fn api_router() -> Router {
 
 pub async fn serve(ctx: Context) -> anyhow::Result<()> {
     let server_port = ctx.config.api_port.unwrap();
+    let server_host = ctx.config.api_host.clone().unwrap();
 
     let app = api_router().layer(
         ServiceBuilder::new()
@@ -29,7 +30,7 @@ pub async fn serve(ctx: Context) -> anyhow::Result<()> {
     );
 
     log::info!("serving on {}", server_port);
-    axum::Server::bind(&format!("127.0.0.1:{}", server_port).parse()?)
+    axum::Server::bind(&format!("{}:{}", server_host, server_port).parse()?)
         .serve(app.into_make_service())
         .await?;
 
