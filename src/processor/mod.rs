@@ -1,9 +1,4 @@
-use std::{
-    ops::DerefMut,
-    path::{Path, PathBuf},
-    sync::Arc,
-    time::Duration,
-};
+use std::{ops::DerefMut, sync::Arc, time::Duration};
 
 use lapin::{
     options::{BasicAckOptions, BasicConsumeOptions, QueueDeclareOptions},
@@ -38,11 +33,13 @@ fn round(x: f32, decimals: u32) -> f32 {
     (x * y).round() / y
 }
 
-async fn calculate_conceptual_pp(beatmap_path: PathBuf, score: &RippleScore) -> f32 {
-    let beatmap = match ConceptualBeatmap::from_path(beatmap_path).await {
-        Ok(beatmap) => beatmap,
-        Err(_) => return 0.0,
-    };
+async fn calculate_conceptual_pp(
+    score: &RippleScore,
+    context: Arc<Context>,
+) -> anyhow::Result<f32> {
+    let beatmap_bytes =
+        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, context).await?;
+    let beatmap = ConceptualBeatmap::from_bytes(&beatmap_bytes).await?;
 
     let result = beatmap
         .pp()
@@ -64,14 +61,16 @@ async fn calculate_conceptual_pp(beatmap_path: PathBuf, score: &RippleScore) -> 
         pp = 0.0;
     }
 
-    pp
+    Ok(pp)
 }
 
-async fn calculate_skill_rebalance_pp(beatmap_path: PathBuf, score: &RippleScore) -> f32 {
-    let beatmap = match SkillRebalanceBeatmap::from_path(beatmap_path).await {
-        Ok(beatmap) => beatmap,
-        Err(_) => return 0.0,
-    };
+async fn calculate_skill_rebalance_pp(
+    score: &RippleScore,
+    context: Arc<Context>,
+) -> anyhow::Result<f32> {
+    let beatmap_bytes =
+        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, context).await?;
+    let beatmap = SkillRebalanceBeatmap::from_bytes(&beatmap_bytes).await?;
 
     let result = beatmap
         .pp()
@@ -93,50 +92,22 @@ async fn calculate_skill_rebalance_pp(beatmap_path: PathBuf, score: &RippleScore
         pp = 0.0;
     }
 
-    pp
+    Ok(pp)
 }
 
 async fn process_scores(
     rework: &Rework,
     scores: Vec<RippleScore>,
-    context: &Arc<Context>,
+    context: Arc<Context>,
 ) -> anyhow::Result<Vec<ReworkScore>> {
     let mut rework_scores: Vec<ReworkScore> = Vec::new();
 
     for score in &scores {
         let new_pp = match rework.rework_id {
-            10 => {
-                calculate_conceptual_pp(
-                    Path::new(&context.config.beatmaps_path)
-                        .join(format!("{}.osu", score.beatmap_id)),
-                    score,
-                )
-                .await
-            }
-            11 => {
-                calculate_conceptual_pp(
-                    Path::new(&context.config.beatmaps_path)
-                        .join(format!("{}.osu", score.beatmap_id)),
-                    score,
-                )
-                .await
-            }
-            12 => {
-                calculate_conceptual_pp(
-                    Path::new(&context.config.beatmaps_path)
-                        .join(format!("{}.osu", score.beatmap_id)),
-                    score,
-                )
-                .await
-            }
-            13 => {
-                calculate_skill_rebalance_pp(
-                    Path::new(&context.config.beatmaps_path)
-                        .join(format!("{}.osu", score.beatmap_id)),
-                    score,
-                )
-                .await
-            }
+            10 => calculate_conceptual_pp(score, context.clone()).await?,
+            11 => calculate_conceptual_pp(score, context.clone()).await?,
+            12 => calculate_conceptual_pp(score, context.clone()).await?,
+            13 => calculate_skill_rebalance_pp(score, context.clone()).await?,
             _ => unreachable!(),
         };
 
@@ -215,7 +186,7 @@ async fn handle_queue_request(
         .fetch_one(context.database.get().await?.deref_mut())
         .await?;
 
-    let rework_scores = process_scores(&rework, scores, &context).await?;
+    let rework_scores = process_scores(&rework, scores, context.clone()).await?;
     let new_pp = calculate_new_pp(&rework_scores, score_count);
 
     for rework_score in rework_scores {
