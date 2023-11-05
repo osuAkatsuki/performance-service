@@ -40,7 +40,9 @@ conceptual-rework = { package = "akatsuki-pp", git = "https://github.com/osuAkat
 async-trait = "0.1.62"
 skill-rebalance = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", branch = "skill-rebalance", features = ["async_tokio"] }
 rust-s3 = "0.33.0"
+
 [profile.release]
 lto = "fat"
-codegen-units = 1
+codegen-units = 16
+opt-level = 3
 panic = "abort"
