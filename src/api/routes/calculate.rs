@@ -60,11 +60,13 @@ async fn calculate_relax_pp(
 
     let mut pp = round(result.pp as f32, 2);
     if pp.is_infinite() || pp.is_nan() {
+        log::warn!("Calculated pp is infinite or NaN, setting to 0");
         pp = 0.0;
     }
 
     let mut stars = round(result.difficulty.stars as f32, 2);
     if stars.is_infinite() || stars.is_nan() {
+        log::warn!("Calculated star rating is infinite or NaN, setting to 0");
         stars = 0.0;
     }
 
@@ -108,11 +110,13 @@ async fn calculate_rosu_pp(beatmap_path: PathBuf, request: &CalculateRequest) ->
 
     let mut pp = round(result.pp() as f32, 2);
     if pp.is_infinite() || pp.is_nan() {
+        log::warn!("Calculated pp is infinite or NaN, setting to 0");
         pp = 0.0;
     }
 
     let mut stars = round(result.stars() as f32, 2);
     if stars.is_infinite() || stars.is_nan() {
+        log::warn!("Calculated star rating is infinite or NaN, setting to 0");
         stars = 0.0;
     }
 
@@ -184,6 +188,10 @@ async fn calculate_play(
                         max_combo: 0,
                     });
 
+                    log::warn!(
+                        "Failed to download beatmap {} from 3rd party",
+                        request.beatmap_id
+                    );
                     continue;
                 }
             }
@@ -195,6 +203,11 @@ async fn calculate_play(
             calculate_rosu_pp(beatmap_path, &request).await
         };
 
+        log::info!(
+            "Calculated performance: {}pp for beatmap {}",
+            result.pp,
+            request.beatmap_id
+        );
         results.push(result);
     }
 
