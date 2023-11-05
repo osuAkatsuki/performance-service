@@ -152,13 +152,21 @@ async fn calculate_play(
 
         let result = match raw_result {
             Ok(result) => result,
-            Err(_) => CalculateResponse {
-                stars: 0.0,
-                pp: 0.0,
-                ar: 0.0,
-                od: 0.0,
-                max_combo: 0,
-            },
+            Err(e) => {
+                log::error!(
+                    "Performance calculation failed for beatmap {}: {}",
+                    request.beatmap_id,
+                    e.to_string()
+                );
+
+                CalculateResponse {
+                    stars: 0.0,
+                    pp: 0.0,
+                    ar: 0.0,
+                    od: 0.0,
+                    max_combo: 0,
+                }
+            }
         };
 
         log::info!(
