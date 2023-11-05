@@ -4,6 +4,9 @@ pub struct Config {
     pub app_component: String,
 
     #[clap(long, env)]
+    pub api_host: Option<String>,
+
+    #[clap(long, env)]
     pub api_port: Option<u16>,
 
     #[clap(long, env)]
