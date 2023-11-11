@@ -27,16 +27,16 @@ async fn get_rework_scores(
 ) -> Json<Option<Vec<APIReworkScore>>> {
     let base_scores: Vec<APIBaseReworkScore> =
         sqlx::query_as(
-            "SELECT user_id, rework_scores.beatmap_id, rework_scores.beatmapset_id, rework_id, score_id, rework_scores.max_combo, mods, accuracy, score, num_300s, num_100s, num_50s, num_gekis, 
-            num_katus, num_misses, old_pp, new_pp, 
-            DENSE_RANK() OVER (ORDER BY old_pp DESC) old_rank, DENSE_RANK() OVER (ORDER BY new_pp DESC) new_rank 
-            FROM 
-                rework_scores 
+            "SELECT user_id, rework_scores.beatmap_id, rework_scores.beatmapset_id, beatmap.song_name, rework_id, score_id, rework_scores.max_combo, mods, accuracy, score, num_300s, num_100s, num_50s, num_gekis,
+            num_katus, num_misses, old_pp, new_pp,
+            DENSE_RANK() OVER (ORDER BY old_pp DESC) old_rank, DENSE_RANK() OVER (ORDER BY new_pp DESC) new_rank
+            FROM
+                rework_scores
             INNER JOIN beatmaps
                 ON rework_scores.beatmap_id = beatmaps.beatmap_id
-            WHERE 
+            WHERE
                 user_id = ? AND rework_id = ?
-            ORDER BY 
+            ORDER BY
                 new_pp DESC
             LIMIT 100",
         )
@@ -48,13 +48,11 @@ async fn get_rework_scores(
 
     let mut scores: Vec<APIReworkScore> = Vec::new();
     for base_score in base_scores {
-        let beatmap: Beatmap = sqlx::query_as(
-            "SELECT beatmap_id, beatmapset_id, song_name FROM beatmaps WHERE beatmap_id = ?",
-        )
-        .bind(base_score.beatmap_id)
-        .fetch_one(ctx.database.get().await.unwrap().deref_mut())
-        .await
-        .unwrap();
+        let beatmap = Beatmap {
+            beatmap_id: base_score.beatmap_id,
+            beatmapset_id: base_score.beatmapset_id,
+            song_name: base_score.song_name,
+        };
 
         let score = APIReworkScore::from_base(base_score, beatmap);
         scores.push(score);

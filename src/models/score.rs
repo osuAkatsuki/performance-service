@@ -50,6 +50,7 @@ pub struct APIBaseReworkScore {
     pub score_id: i64,
     pub beatmap_id: i32,
     pub beatmapset_id: i32,
+    pub song_name: String,
     pub user_id: i32,
     pub rework_id: i32,
     pub max_combo: i32,
