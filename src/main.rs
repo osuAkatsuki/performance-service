@@ -24,7 +24,7 @@ async fn main() -> anyhow::Result<()> {
         .username(&config.database_username)
         .password(&config.database_password)
         .database(&config.database_name);
-    let database = DbPool::new(database_options, config.database_pool_max_size);
+    let database = DbPool::new(database_options, config.database_pool_max_size)?;
 
     let amqp_url = amqp_dsn(
         &config.amqp_username,

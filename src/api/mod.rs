@@ -6,6 +6,7 @@ use tower_http::trace::TraceLayer;
 
 use crate::context::Context;
 
+mod error;
 mod routes;
 
 fn api_router() -> Router {

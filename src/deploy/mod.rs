@@ -241,7 +241,7 @@ async fn recalculate_mode_scores(
         &format!(
             "SELECT s.id, s.beatmap_md5, s.userid, s.score, s.max_combo, s.full_combo, s.mods, s.300_count, 
             s.100_count, s.50_count, s.katus_count, s.gekis_count, s.misses_count, s.time, s.play_mode, s.completed, 
-            s.accuracy, s.pp, s.checksum, s.patcher, s.pinned, b.beatmap_id, b.beatmapset_id 
+            s.accuracy, s.pp, s.checksum, s.patcher, s.pinned, b.beatmap_id, b.beatmapset_id, b.song_name  
             FROM {} s 
             INNER JOIN 
                 beatmaps b 
@@ -422,7 +422,7 @@ async fn recalculate_user(
         &format!(
             "SELECT s.id, s.beatmap_md5, s.userid, s.score, s.max_combo, s.full_combo, s.mods, s.300_count, 
             s.100_count, s.50_count, s.katus_count, s.gekis_count, s.misses_count, s.time, s.play_mode, s.completed, 
-            s.accuracy, s.pp, s.checksum, s.patcher, s.pinned, b.beatmap_id, b.beatmapset_id 
+            s.accuracy, s.pp, s.checksum, s.patcher, s.pinned, b.beatmap_id, b.beatmapset_id, b.song_name 
             FROM {} s 
             INNER JOIN 
                 beatmaps b 
@@ -495,14 +495,12 @@ async fn recalculate_user(
     .bind(user_id)
     .bind(mode)
     .fetch_optional(ctx.database.get().await?.deref_mut())
-    .await
-    .unwrap_or(None);
+    .await?;
 
     let inactive_days = match last_score_time {
         Some(time) => {
             ((SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .unwrap()
+                .duration_since(SystemTime::UNIX_EPOCH)?
                 .as_secs() as i32)
                 - time)
                 / 60
@@ -585,32 +583,32 @@ struct RecalculateContext {
 
 pub async fn serve(context: Context) -> anyhow::Result<()> {
     print!("Enter the modes (comma delimited) to deploy: ");
-    std::io::stdout().flush().unwrap();
+    std::io::stdout().flush()?;
 
     let mut modes_str = String::new();
     std::io::stdin().read_line(&mut modes_str)?;
     let modes = modes_str
         .trim()
         .split(',')
-        .map(|s| s.parse::<i32>().unwrap())
+        .map(|s| s.parse::<i32>().expect("failed to parse mode"))
         .collect::<Vec<_>>();
 
     print!("\n");
-    std::io::stdout().flush().unwrap();
+    std::io::stdout().flush()?;
 
     print!("Enter the relax bits (comma delimited) to deploy: ");
-    std::io::stdout().flush().unwrap();
+    std::io::stdout().flush()?;
 
     let mut relax_str = String::new();
     std::io::stdin().read_line(&mut relax_str)?;
     let relax_bits = relax_str
         .trim()
         .split(',')
-        .map(|s| s.parse::<i32>().unwrap())
+        .map(|s| s.parse::<i32>().expect("failed to parse relax bits"))
         .collect::<Vec<_>>();
 
     print!("\n");
-    std::io::stdout().flush().unwrap();
+    std::io::stdout().flush()?;
 
     let recalculate_context = Arc::new(Mutex::new(RecalculateContext {
         beatmaps: HashMap::new(),

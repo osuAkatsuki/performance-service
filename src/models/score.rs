@@ -5,6 +5,7 @@ pub struct ReworkScore {
     pub score_id: i64,
     pub beatmap_id: i32,
     pub beatmapset_id: i32,
+    pub song_name: String,
     pub user_id: i32,
     pub rework_id: i32,
     pub max_combo: i32,
@@ -27,6 +28,7 @@ impl ReworkScore {
             score_id: score.id,
             beatmap_id: score.beatmap_id,
             beatmapset_id: score.beatmapset_id,
+            song_name: score.song_name.clone(),
             user_id: score.userid,
             rework_id,
             max_combo: score.max_combo,
@@ -50,6 +52,7 @@ pub struct APIBaseReworkScore {
     pub score_id: i64,
     pub beatmap_id: i32,
     pub beatmapset_id: i32,
+    pub song_name: String,
     pub user_id: i32,
     pub rework_id: i32,
     pub max_combo: i32,
@@ -74,6 +77,7 @@ impl APIBaseReworkScore {
             score_id: score.score_id,
             beatmap_id: score.beatmap_id,
             beatmapset_id: score.beatmapset_id,
+            song_name: score.song_name,
             user_id: score.user_id,
             rework_id: score.rework_id,
             max_combo: score.max_combo,
@@ -187,4 +191,5 @@ pub struct RippleScore {
 
     pub beatmap_id: i32,
     pub beatmapset_id: i32,
+    pub song_name: String,
 }

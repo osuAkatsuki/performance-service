@@ -24,8 +24,14 @@ use crate::{
     usecases,
 };
 
-use conceptual_rework::{Beatmap as ConceptualBeatmap, BeatmapExt as ConceptualBeatmapExt, GameMode as ConceptualGameMode};
-use skill_rebalance::{Beatmap as SkillRebalanceBeatmap, BeatmapExt as SkillRebalanceBeatmapExt, GameMode as SkillRebalanceGameMode};
+use conceptual_rework::{
+    Beatmap as ConceptualBeatmap, BeatmapExt as ConceptualBeatmapExt,
+    GameMode as ConceptualGameMode,
+};
+use skill_rebalance::{
+    Beatmap as SkillRebalanceBeatmap, BeatmapExt as SkillRebalanceBeatmapExt,
+    GameMode as SkillRebalanceGameMode,
+};
 
 fn round(x: f32, decimals: u32) -> f32 {
     let y = 10i32.pow(decimals) as f32;
@@ -122,7 +128,7 @@ async fn process_scores(
                     score,
                 )
                 .await
-            },
+            }
             13 => {
                 calculate_skill_rebalance_pp(
                     Path::new(&context.config.beatmaps_path)
@@ -161,10 +167,12 @@ async fn handle_queue_request(
     context: Arc<Context>,
     delivery_tag: u64,
 ) -> anyhow::Result<()> {
-    let rework = usecases::reworks::fetch_one(request.rework_id, context.clone())
-        .await?
-        .unwrap();
+    let rework = usecases::reworks::fetch_one(request.rework_id, context.clone()).await?;
+    if rework.is_none() {
+        anyhow::bail!("failed to find rework");
+    }
 
+    let rework = rework.unwrap();
     let scores_table = match rework.rx {
         0 => "scores",
         1 => "scores_relax",
@@ -176,7 +184,7 @@ async fn handle_queue_request(
         &format!(
             "SELECT s.id, s.beatmap_md5, s.userid, s.score, s.max_combo, s.full_combo, s.mods, s.300_count, 
             s.100_count, s.50_count, s.katus_count, s.gekis_count, s.misses_count, s.time, s.play_mode, s.completed, 
-            s.accuracy, s.pp, s.checksum, s.patcher, s.pinned, b.beatmap_id, b.beatmapset_id 
+            s.accuracy, s.pp, s.checksum, s.patcher, s.pinned, b.beatmap_id, b.beatmapset_id, b.song_name 
             FROM {} s 
             INNER JOIN 
                 beatmaps b 
@@ -330,9 +338,8 @@ async fn rmq_listen(context: Arc<Context>) -> anyhow::Result<()> {
         if let Ok(delivery) = delivery {
             let deserialized_data: QueueRequest =
                 rkyv::check_archived_root::<QueueRequest>(&delivery.data)
-                    .unwrap()
-                    .deserialize(&mut rkyv::Infallible)
-                    .unwrap();
+                    .expect("failed to check archived root?")
+                    .deserialize(&mut rkyv::Infallible)?;
 
             log::info!(
                 "Received recalculation request for user ID {} on rework ID {}",

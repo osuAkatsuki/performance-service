@@ -8,6 +8,7 @@ use axum::{
 };
 
 use crate::{
+    api::error::AppResult,
     context::Context,
     models::{
         rework::Rework,
@@ -28,17 +29,16 @@ pub fn router() -> Router {
 async fn get_rework_user(
     ctx: Extension<Arc<Context>>,
     Path(user_id): Path<i32>,
-) -> Json<Option<ReworkUser>> {
+) -> AppResult<Json<Option<ReworkUser>>> {
     let stats: Option<(String, String)> = sqlx::query_as(
         "SELECT users.username, country FROM users INNER JOIN users_stats USING(id) WHERE id = ?",
     )
     .bind(user_id)
-    .fetch_optional(ctx.database.get().await.unwrap().deref_mut())
-    .await
-    .unwrap();
+    .fetch_optional(ctx.database.get().await?.deref_mut())
+    .await?;
 
     if stats.is_none() {
-        return Json(None);
+        return Ok(Json(None));
     }
 
     let (user_name, country) = stats.unwrap();
@@ -46,9 +46,8 @@ async fn get_rework_user(
     let rework_stats: Vec<ReworkStats> =
         sqlx::query_as("SELECT * FROM rework_stats WHERE user_id = ?")
             .bind(user_id)
-            .fetch_all(ctx.database.get().await.unwrap().deref_mut())
-            .await
-            .unwrap();
+            .fetch_all(ctx.database.get().await?.deref_mut())
+            .await?;
 
     let rework_ids = rework_stats
         .iter()
@@ -59,36 +58,34 @@ async fn get_rework_user(
     for rework_id in rework_ids {
         let rework: Rework = sqlx::query_as("SELECT * FROM reworks WHERE rework_id = ?")
             .bind(rework_id)
-            .fetch_one(ctx.database.get().await.unwrap().deref_mut())
-            .await
-            .unwrap();
+            .fetch_one(ctx.database.get().await?.deref_mut())
+            .await?;
 
         reworks.push(rework);
     }
 
-    Json(Some(ReworkUser {
+    Ok(Json(Some(ReworkUser {
         user_id,
         user_name,
         country,
         reworks,
-    }))
+    })))
 }
 
 async fn get_rework_stats(
     ctx: Extension<Arc<Context>>,
     Path((rework_id, user_id)): Path<(i32, i32)>,
-) -> Json<Option<APIReworkStats>> {
+) -> AppResult<Json<Option<APIReworkStats>>> {
     let stats: Option<ReworkStats> = sqlx::query_as(
         "SELECT user_id, rework_id, old_pp, new_pp FROM rework_stats WHERE user_id = ? AND rework_id = ?"
     )
         .bind(user_id)
         .bind(rework_id)
-        .fetch_optional(ctx.database.get().await.unwrap().deref_mut())
-        .await
-        .unwrap();
+        .fetch_optional(ctx.database.get().await?.deref_mut())
+        .await?;
 
     if stats.is_none() {
-        return Json(None);
+        return Ok(Json(None));
     }
 
     let stats = stats.unwrap();
@@ -97,17 +94,15 @@ async fn get_rework_stats(
         "SELECT users_stats.country, users.username FROM users_stats INNER JOIN users USING(id) WHERE users_stats.id = ?"
     )
         .bind(user_id)
-        .fetch_one(ctx.database.get().await.unwrap().deref_mut())
-        .await
-        .unwrap();
+        .fetch_one(ctx.database.get().await?.deref_mut())
+        .await?;
 
-    let mut redis_connection = ctx.redis.get_async_connection().await.unwrap();
+    let mut redis_connection = ctx.redis.get_async_connection().await?;
 
     let rework: Rework = sqlx::query_as("SELECT * FROM reworks WHERE rework_id = ?")
         .bind(rework_id)
-        .fetch_one(ctx.database.get().await.unwrap().deref_mut())
-        .await
-        .unwrap();
+        .fetch_one(ctx.database.get().await?.deref_mut())
+        .await?;
 
     let redis_leaderboard = match rework.rx {
         0 => "leaderboard".to_string(),
@@ -129,13 +124,11 @@ async fn get_rework_stats(
             format!("ripple:{}:{}", redis_leaderboard, stats_prefix),
             user_id,
         )
-        .await
-        .unwrap();
+        .await?;
 
     let new_rank_idx: Option<i64> = redis_connection
         .zrevrank(format!("rework:leaderboard:{}", rework.rework_id), user_id)
-        .await
-        .unwrap();
+        .await?;
 
     let api_user = APIReworkStats::from_stats(
         stats,
@@ -144,5 +137,5 @@ async fn get_rework_stats(
         (old_rank_idx.unwrap_or(-1) + 1) as u64,
         (new_rank_idx.unwrap_or(-1) + 1) as u64,
     );
-    Json(Some(api_user))
+    Ok(Json(Some(api_user)))
 }
