@@ -11,7 +11,7 @@ use crate::{
 use lapin::{options::BasicPublishOptions, BasicProperties};
 use redis::AsyncCommands;
 
-async fn queue_user(user_id: i32, rework: &Rework, context: &Context) {
+async fn queue_user(user_id: i32, rework: &Rework, context: &Context) -> anyhow::Result<()> {
     let scores_table = match rework.rx {
         0 => "scores",
         1 => "scores_relax",
@@ -27,15 +27,13 @@ async fn queue_user(user_id: i32, rework: &Rework, context: &Context) {
     ))
     .bind(user_id)
     .bind(rework.mode)
-    .fetch_optional(context.database.get().await.unwrap().deref_mut())
-    .await
-    .unwrap_or(None);
+    .fetch_optional(context.database.get().await?.deref_mut())
+    .await?;
 
     let inactive_days = match last_score_time {
         Some(time) => {
             ((SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .unwrap()
+                .duration_since(SystemTime::UNIX_EPOCH)?
                 .as_secs() as i32)
                 - time)
                 / 60
@@ -46,7 +44,7 @@ async fn queue_user(user_id: i32, rework: &Rework, context: &Context) {
     };
 
     if inactive_days >= 60 {
-        return;
+        return Ok(());
     }
 
     let in_queue: Option<bool> = sqlx::query_scalar(
@@ -55,20 +53,18 @@ async fn queue_user(user_id: i32, rework: &Rework, context: &Context) {
     .bind(user_id)
     .bind(rework.rework_id)
     .bind(rework.updated_at)
-    .fetch_optional(context.database.get().await.unwrap().deref_mut())
-    .await
-    .unwrap();
+    .fetch_optional(context.database.get().await?.deref_mut())
+    .await?;
 
     if in_queue.is_some() {
-        return;
+        return Ok(());
     }
 
     sqlx::query(r#"REPLACE INTO rework_queue (user_id, rework_id) VALUES (?, ?)"#)
         .bind(user_id)
         .bind(rework.rework_id)
-        .execute(context.database.get().await.unwrap().deref_mut())
-        .await
-        .unwrap();
+        .execute(context.database.get().await?.deref_mut())
+        .await?;
 
     context
         .amqp_channel
@@ -79,32 +75,31 @@ async fn queue_user(user_id: i32, rework: &Rework, context: &Context) {
             &rkyv::to_bytes::<_, 256>(&QueueRequest {
                 user_id,
                 rework_id: rework.rework_id,
-            })
-            .unwrap(),
+            })?,
             BasicProperties::default(),
         )
-        .await
-        .unwrap();
+        .await?;
 
     log::info!("Queued user ID {}", user_id);
+    Ok(())
 }
 
 pub async fn serve(context: Context) -> anyhow::Result<()> {
     print!("Enter a rework ID to mass recalculate: ");
-    std::io::stdout().flush().unwrap();
+    std::io::stdout().flush()?;
 
     let mut rework_id_str = String::new();
     std::io::stdin().read_line(&mut rework_id_str)?;
     let rework_id = rework_id_str.trim().parse::<i32>()?;
 
     print!("\n");
-    std::io::stdout().flush().unwrap();
+    std::io::stdout().flush()?;
 
     log::info!("Mass recalculating on rework ID {}", rework_id);
 
     let rework = usecases::reworks::fetch_one(rework_id, Arc::from(context.clone()))
         .await?
-        .unwrap();
+        .expect("failed to find rework");
 
     sqlx::query("DELETE FROM rework_scores WHERE rework_id = ?")
         .bind(rework_id)
@@ -146,7 +141,7 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
         .await?;
 
     for (user_id,) in user_ids {
-        queue_user(user_id, &rework, &context).await;
+        queue_user(user_id, &rework, &context).await?;
     }
 
     Ok(())

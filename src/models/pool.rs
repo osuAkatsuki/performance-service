@@ -26,10 +26,7 @@ impl Manager for DbPool {
 type Pool = deadpool::managed::Pool<DbPool>;
 
 impl DbPool {
-    pub fn new(options: MySqlConnectOptions, max_size: usize) -> Pool {
-        Pool::builder(Self { options })
-            .max_size(max_size)
-            .build()
-            .unwrap()
+    pub fn new(options: MySqlConnectOptions, max_size: usize) -> anyhow::Result<Pool> {
+        Ok(Pool::builder(Self { options }).max_size(max_size).build()?)
     }
 }

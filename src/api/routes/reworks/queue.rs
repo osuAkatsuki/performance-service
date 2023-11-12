@@ -6,7 +6,7 @@ use axum::{
     Json, Router,
 };
 
-use crate::{context::Context, models::queue::QueueResponse, usecases};
+use crate::{api::error::AppResult, context::Context, models::queue::QueueResponse, usecases};
 
 pub fn router() -> Router {
     Router::new().route("/api/v1/reworks/:rework_id/queue", post(send_to_queue))
@@ -21,10 +21,8 @@ async fn send_to_queue(
     Extension(ctx): Extension<Arc<Context>>,
     Path(rework_id): Path<i32>,
     Query(query): Query<QueueRequestQuery>,
-) -> Json<QueueResponse> {
-    let response = usecases::sessions::enqueue(query.session, rework_id, ctx.clone())
-        .await
-        .unwrap();
+) -> AppResult<Json<QueueResponse>> {
+    let response = usecases::sessions::enqueue(query.session, rework_id, ctx.clone()).await?;
 
-    Json(response)
+    Ok(Json(response))
 }

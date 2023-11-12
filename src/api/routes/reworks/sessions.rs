@@ -6,7 +6,7 @@ use axum::{
 use std::sync::Arc;
 
 use crate::context::Context;
-use crate::usecases;
+use crate::{api::error::AppResult, usecases};
 
 pub fn router() -> Router {
     Router::new()
@@ -23,15 +23,17 @@ struct CreateSessionRequest {
 async fn create_session(
     Extension(ctx): Extension<Arc<Context>>,
     Json(request): Json<CreateSessionRequest>,
-) -> Json<usecases::sessions::CreateSessionResponse> {
+) -> AppResult<Json<usecases::sessions::CreateSessionResponse>> {
     let response =
-        usecases::sessions::create(request.username, request.password_md5, ctx.clone()).await;
+        usecases::sessions::create(request.username, request.password_md5, ctx.clone()).await?;
 
-    Json(response)
+    Ok(Json(response))
 }
 
-async fn delete_session(Extension(ctx): Extension<Arc<Context>>, Path(session): Path<String>) {
-    let _ = usecases::sessions::delete(session, ctx.clone())
-        .await
-        .unwrap();
+async fn delete_session(
+    Extension(ctx): Extension<Arc<Context>>,
+    Path(session): Path<String>,
+) -> AppResult<()> {
+    let _ = usecases::sessions::delete(session, ctx.clone()).await?;
+    Ok(())
 }

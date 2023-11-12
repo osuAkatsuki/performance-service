@@ -5,7 +5,7 @@ use axum::{
 };
 use std::{ops::DerefMut, sync::Arc};
 
-use crate::context::Context;
+use crate::{api::error::AppResult, context::Context};
 
 pub fn router() -> Router {
     Router::new().route("/api/v1/reworks/:rework_id/users/search", get(search_users))
@@ -26,7 +26,7 @@ async fn search_users(
     ctx: Extension<Arc<Context>>,
     Path(rework_id): Path<i32>,
     Query(query): Query<SearchQuery>,
-) -> Json<Vec<SearchUser>> {
+) -> AppResult<Json<Vec<SearchUser>>> {
     let users: Vec<SearchUser> = sqlx::query_as(
         "SELECT id user_id, username user_name FROM users WHERE username_safe LIKE ?",
     )
@@ -38,9 +38,8 @@ async fn search_users(
             .replace(" ", "_")
             .replace(|c: char| !c.is_ascii(), "")
     ))
-    .fetch_all(ctx.database.get().await.unwrap().deref_mut())
-    .await
-    .unwrap();
+    .fetch_all(ctx.database.get().await?.deref_mut())
+    .await?;
 
     let mut to_remove: Vec<i32> = Vec::new();
     for user in &users {
@@ -48,9 +47,8 @@ async fn search_users(
             sqlx::query_scalar("SELECT 1 FROM rework_stats WHERE user_id = ? AND rework_id = ?")
                 .bind(user.user_id)
                 .bind(rework_id)
-                .fetch_optional(ctx.database.get().await.unwrap().deref_mut())
-                .await
-                .unwrap()
+                .fetch_optional(ctx.database.get().await?.deref_mut())
+                .await?
                 .unwrap_or(false);
 
         if !in_rework {
@@ -73,5 +71,5 @@ async fn search_users(
             .unwrap()
     });
 
-    Json(users)
+    Ok(Json(users))
 }
