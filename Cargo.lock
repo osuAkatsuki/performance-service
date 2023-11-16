@@ -55,8 +55,8 @@ dependencies = [
 
 [[package]]
 name = "akatsuki-pp"
-version = "0.9.5"
-source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=96421f54f435bd5c6aa2d90730512e5672b14609#96421f54f435bd5c6aa2d90730512e5672b14609"
+version = "0.9.6"
+source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=a8b4eaffb2274d2e86ff042b7327286e13b6488d#a8b4eaffb2274d2e86ff042b7327286e13b6488d"
 dependencies = [
  "tokio",
 ]
@@ -1820,7 +1820,7 @@ version = "0.1.0"
 dependencies = [
  "akatsuki-pp 0.9.3",
  "akatsuki-pp 0.9.4",
- "akatsuki-pp 0.9.5",
+ "akatsuki-pp 0.9.6",
  "anyhow",
  "async-trait",
  "axum",
