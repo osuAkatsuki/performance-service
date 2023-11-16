@@ -41,7 +41,7 @@ dependencies = [
 [[package]]
 name = "akatsuki-pp"
 version = "0.9.4"
-source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=764da0dbf42ed80441acf99d070aaedabaed4b75#764da0dbf42ed80441acf99d070aaedabaed4b75"
+source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=4ae182f4f294e6ac34eca1dc2e5f676748c4fd76#4ae182f4f294e6ac34eca1dc2e5f676748c4fd76"
 dependencies = [
  "tokio",
 ]
@@ -49,7 +49,7 @@ dependencies = [
 [[package]]
 name = "akatsuki-pp"
 version = "0.9.4"
-source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=fbe3d994299bfe07fd4de70f9e37ed9b91853ced#fbe3d994299bfe07fd4de70f9e37ed9b91853ced"
+source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=764da0dbf42ed80441acf99d070aaedabaed4b75#764da0dbf42ed80441acf99d070aaedabaed4b75"
 dependencies = [
  "tokio",
 ]
@@ -1774,8 +1774,8 @@ version = "0.1.0"
 dependencies = [
  "akatsuki-pp 0.9.3",
  "akatsuki-pp 0.9.4 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?branch=skill-rebalance)",
+ "akatsuki-pp 0.9.4 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=4ae182f4f294e6ac34eca1dc2e5f676748c4fd76)",
  "akatsuki-pp 0.9.4 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=764da0dbf42ed80441acf99d070aaedabaed4b75)",
- "akatsuki-pp 0.9.4 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=fbe3d994299bfe07fd4de70f9e37ed9b91853ced)",
  "anyhow",
  "async-trait",
  "axum",
