@@ -38,7 +38,7 @@ bcrypt = "0.13.0"
 uuid = { version = "1.2.1", features = ["v4"] }
 futures = "0.3.17"
 strsim = "0.10.0"
-akatsuki-pp-rs = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "764da0dbf42ed80441acf99d070aaedabaed4b75", features = [
+akatsuki-pp-rs = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "96421f54f435bd5c6aa2d90730512e5672b14609", features = [
     "async_tokio",
 ] }
 reqwest = "0.11"
@@ -50,9 +50,6 @@ skill-rebalance = { package = "akatsuki-pp", git = "https://github.com/osuAkatsu
     "async_tokio",
 ] }
 rust-s3 = "0.33.0"
-the = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "4ae182f4f294e6ac34eca1dc2e5f676748c4fd76", features = [
-    "async_tokio",
-] }
 
 [profile.release]
 lto = "fat"
