@@ -350,7 +350,7 @@ async fn rmq_listen(context: Arc<Context>) -> anyhow::Result<()> {
                 .await;
 
                 if result.is_err() {
-                    panic!("Error processing queue request: {:?}", result);
+                    log::error!("Error processing queue request: {:?}", result);
                 }
             });
         }
