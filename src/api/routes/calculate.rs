@@ -154,9 +154,9 @@ async fn calculate_play(
             Ok(result) => result,
             Err(e) => {
                 log::error!(
-                    "Performance calculation failed for beatmap {}: {}",
-                    request.beatmap_id,
-                    e.to_string()
+                    beatmap_id = request.beatmap_id,
+                    error = e.to_string();
+                    "Performance calculation failed for beatmap",
                 );
 
                 CalculateResponse {
@@ -170,9 +170,10 @@ async fn calculate_play(
         };
 
         log::info!(
-            "Calculated performance: {}pp for beatmap {}",
-            result.pp,
-            request.beatmap_id
+            performance_points = result.pp,
+            star_rating = result.stars,
+            beatmap_id = request.beatmap_id;
+            "Calculated performance for beatmap.",
         );
         results.push(result);
     }

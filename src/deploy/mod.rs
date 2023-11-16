@@ -193,11 +193,11 @@ async fn recalculate_score(
     }
 
     log::info!(
-        "Recalculated score ID {} (mode: {}) | {} -> {}",
-        score.id,
-        score.play_mode,
-        score.pp,
-        response.pp,
+        score_id = score.id,
+        score_mode = score.play_mode,
+        old_pp = score.pp,
+        new_pp = score.pp;
+        "Recalculated score",
     );
 
     Ok(())
@@ -503,11 +503,11 @@ async fn recalculate_user(
         .await?;
 
     log::info!(
-        "Recalculated user {} in mode {} (rx: {}) | pp: {}",
-        user_id,
-        mode,
-        rx,
-        new_pp
+        user_id = user_id,
+        mode = mode,
+        relax = rx,
+        new_pp = new_pp;
+        "Recalculated user",
     );
 
     Ok(())

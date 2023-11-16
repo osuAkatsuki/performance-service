@@ -12,8 +12,8 @@ if [ -z "$APP_COMPONENT" ]; then
 fi
 
 if [[ $PULL_SECRETS_FROM_VAULT -eq 1 ]]; then
-  pip install --break-system-packages -i $PYPI_INDEX_URL akatsuki-cli
-  akatsuki vault get performance-service $APP_ENV -o .env
+  # TODO: revert to $APP_ENV
+  akatsuki vault get performance-service production-k8s -o .env
   source .env
 fi
 
@@ -27,4 +27,4 @@ fi
 /scripts/await-service.sh $AMQP_HOST $AMQP_PORT $SERVICE_READINESS_TIMEOUT
 
 # run the service (APP_COMPONENT is handled by the service)
-/usr/local/bin/performance-service
+exec /usr/local/bin/performance-service

@@ -110,7 +110,10 @@ async fn process_scores(
             _ => unreachable!(),
         };
 
-        log::info!("Recalculated PP for score ID {}", score.id);
+        log::info!(
+            score_id = score.id;
+            "Recalculated PP for score",
+        );
 
         let rework_score = ReworkScore::from_ripple_score(score, rework.rework_id, new_pp);
         rework_scores.push(rework_score);
@@ -276,9 +279,9 @@ async fn handle_queue_request(
         .await?;
 
     log::info!(
-        "Processed recalculation for user ID {} on rework {}",
-        request.user_id,
-        rework.rework_name
+        user_id = request.user_id,
+        rework_name = rework.rework_name;
+        "Processed recalculation for user on rework",
     );
 
     Ok(())
@@ -312,9 +315,9 @@ async fn rmq_listen(context: Arc<Context>) -> anyhow::Result<()> {
                     .deserialize(&mut rkyv::Infallible)?;
 
             log::info!(
-                "Received recalculation request for user ID {} on rework ID {}",
-                deserialized_data.user_id,
-                deserialized_data.rework_id
+                user_id = deserialized_data.user_id,
+                rework_id = deserialized_data.rework_id;
+                "Received recalculation request for user on rework",
             );
 
             let context_clone = context.clone();
@@ -327,7 +330,7 @@ async fn rmq_listen(context: Arc<Context>) -> anyhow::Result<()> {
                 .await;
 
                 if result.is_err() {
-                    log::error!("Error processing queue request: {:?}", result);
+                    log::error!(error = result.unwrap_err().to_string(); "Error processing queue request");
                 }
             });
         }

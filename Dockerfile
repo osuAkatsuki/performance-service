@@ -26,5 +26,7 @@ COPY migrations /migrations
 
 RUN apt update && apt install -y openssl python3-pip
 
+RUN pip install -i https://pypi2.akatsuki.gg/cmyui/dev --break-system-packages akatsuki-cli
+
 COPY --from=build /performance-service/target/release/performance-service /usr/local/bin
 CMD ["/scripts/bootstrap.sh"]
