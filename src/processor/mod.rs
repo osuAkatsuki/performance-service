@@ -27,6 +27,7 @@ use skill_rebalance::{
     Beatmap as SkillRebalanceBeatmap, BeatmapExt as SkillRebalanceBeatmapExt,
     GameMode as SkillRebalanceGameMode,
 };
+use the::Beatmap as TheBeatmap;
 
 fn round(x: f32, decimals: u32) -> f32 {
     let y = 10i32.pow(decimals) as f32;
@@ -95,6 +96,26 @@ async fn calculate_skill_rebalance_pp(
     Ok(pp)
 }
 
+async fn calculate_the_pp(score: &RippleScore, context: Arc<Context>) -> anyhow::Result<f32> {
+    let beatmap_bytes =
+        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, context).await?;
+    let beatmap = TheBeatmap::from_bytes(&beatmap_bytes).await?;
+
+    let result = the::osu_2019::OsuPP::new(&beatmap)
+        .mods(score.mods as u32)
+        .combo(score.max_combo as usize)
+        .misses(score.count_misses as usize)
+        .accuracy(score.accuracy)
+        .calculate();
+
+    let mut pp = round(result.pp as f32, 2);
+    if pp.is_infinite() || pp.is_nan() {
+        pp = 0.0;
+    }
+
+    Ok(pp)
+}
+
 async fn process_scores(
     rework: &Rework,
     scores: Vec<RippleScore>,
@@ -108,6 +129,7 @@ async fn process_scores(
             11 => calculate_conceptual_pp(score, context.clone()).await?,
             12 => calculate_conceptual_pp(score, context.clone()).await?,
             13 => calculate_skill_rebalance_pp(score, context.clone()).await?,
+            14 => calculate_the_pp(score, context.clone()).await?,
             _ => unreachable!(),
         };
 
