@@ -50,7 +50,7 @@ skill-rebalance = { package = "akatsuki-pp", git = "https://github.com/osuAkatsu
     "async_tokio",
 ] }
 rust-s3 = "0.33.0"
-the = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "4311fb4b4c735c1b1663959b067dfe7e28e46b61", features = [
+the = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "fbc9e3c3ec1673047840c0c86f8fe34e71d9fd0e", features = [
     "async_tokio",
 ] }
 
