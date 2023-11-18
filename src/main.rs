@@ -2,7 +2,8 @@ use clap::Parser;
 use deadpool_lapin::{Manager, Pool};
 use lapin::ConnectionProperties;
 use performance_service::{
-    api, config::Config, context::Context, deploy, mass_recalc, models::pool::DbPool, processor,
+    api, config::Config, context::Context, deploy, individual_recalc, mass_recalc,
+    models::pool::DbPool, processor,
 };
 use redis::{Client, ConnectionAddr, ConnectionInfo, RedisConnectionInfo};
 use s3::{creds::Credentials, Bucket, Region};
@@ -78,6 +79,7 @@ async fn main() -> anyhow::Result<()> {
         "processor" => processor::serve(context).await?,
         "mass_recalc" => mass_recalc::serve(context).await?,
         "deploy" => deploy::serve(context).await?,
+        "individual_recalc" => individual_recalc::serve(context).await?,
         _ => panic!("unknown app component"),
     }
 
