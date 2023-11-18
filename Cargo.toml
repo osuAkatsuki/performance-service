@@ -50,6 +50,10 @@ skill-rebalance = { package = "akatsuki-pp", git = "https://github.com/osuAkatsu
     "async_tokio",
 ] }
 rust-s3 = "0.33.0"
+structured-logger = "1.0.3"
+woot-precision = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", branch = "woot-precision", features = [
+    "async_tokio",
+] }
 
 [profile.release]
 lto = "fat"
