@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use std::time::SystemTime;
 use std::{io::Write, ops::DerefMut};
 
 use crate::{
@@ -12,41 +11,6 @@ use lapin::{options::BasicPublishOptions, BasicProperties};
 use redis::AsyncCommands;
 
 async fn queue_user(user_id: i32, rework: &Rework, context: &Context) -> anyhow::Result<()> {
-    let scores_table = match rework.rx {
-        0 => "scores",
-        1 => "scores_relax",
-        2 => "scores_ap",
-        _ => unreachable!(),
-    };
-
-    let last_score_time: Option<i32> = sqlx::query_scalar(&format!(
-        "SELECT max(time) FROM {} INNER JOIN beatmaps USING(beatmap_md5) 
-        WHERE userid = ? AND completed = 3 AND ranked IN (2, 3) AND play_mode = ? 
-        ORDER BY pp DESC LIMIT 100",
-        scores_table
-    ))
-    .bind(user_id)
-    .bind(rework.mode)
-    .fetch_optional(context.database.get().await?.deref_mut())
-    .await?;
-
-    let inactive_days = match last_score_time {
-        Some(time) => {
-            ((SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)?
-                .as_secs() as i32)
-                - time)
-                / 60
-                / 60
-                / 24
-        }
-        None => 60,
-    };
-
-    if inactive_days >= 60 {
-        return Ok(());
-    }
-
     let in_queue: Option<bool> = sqlx::query_scalar(
         "SELECT 1 FROM rework_queue WHERE user_id = ? AND rework_id = ? AND processed_at < ?",
     )
