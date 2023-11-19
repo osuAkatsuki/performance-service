@@ -56,7 +56,7 @@ dependencies = [
 [[package]]
 name = "akatsuki-pp"
 version = "0.9.6"
-source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=a8b4eaffb2274d2e86ff042b7327286e13b6488d#a8b4eaffb2274d2e86ff042b7327286e13b6488d"
+source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=8aad0c117120c0f9806cdda4072bb374cb8845b9#8aad0c117120c0f9806cdda4072bb374cb8845b9"
 dependencies = [
  "tokio",
 ]
@@ -64,7 +64,7 @@ dependencies = [
 [[package]]
 name = "akatsuki-pp"
 version = "0.9.6"
-source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=e232f8f4441d412caa0dba5152ed3f0ed48c0f61#e232f8f4441d412caa0dba5152ed3f0ed48c0f61"
+source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=a8b4eaffb2274d2e86ff042b7327286e13b6488d#a8b4eaffb2274d2e86ff042b7327286e13b6488d"
 dependencies = [
  "tokio",
 ]
@@ -1849,8 +1849,8 @@ version = "0.1.0"
 dependencies = [
  "akatsuki-pp 0.9.3",
  "akatsuki-pp 0.9.4",
+ "akatsuki-pp 0.9.6 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=8aad0c117120c0f9806cdda4072bb374cb8845b9)",
  "akatsuki-pp 0.9.6 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=a8b4eaffb2274d2e86ff042b7327286e13b6488d)",
- "akatsuki-pp 0.9.6 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=e232f8f4441d412caa0dba5152ed3f0ed48c0f61)",
  "anyhow",
  "async-trait",
  "axum",
