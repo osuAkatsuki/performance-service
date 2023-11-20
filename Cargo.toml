@@ -54,7 +54,7 @@ structured-logger = "1.0.3"
 woot-precision = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "8aad0c117120c0f9806cdda4072bb374cb8845b9", features = [
     "async_tokio",
 ] }
-cursordance = { package = "akatsuki-pp", git = "https://github.com/CursorDance/akatsuki-pp-rs", branch = "patch-1", features = [
+cursordance = { package = "akatsuki-pp", git = "https://github.com/CursorDance/akatsuki-pp-rs", rev = "56a71011e13274e63f6548611f3d5c822377c0d3", features = [
     "async_tokio",
 ] }
 
