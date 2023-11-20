@@ -54,6 +54,9 @@ structured-logger = "1.0.3"
 woot-precision = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "8aad0c117120c0f9806cdda4072bb374cb8845b9", features = [
     "async_tokio",
 ] }
+cursordance = { package = "akatsuki-pp", git = "https://github.com/CursorDance/akatsuki-pp-rs", branch = "patch-1", features = [
+    "async_tokio",
+] }
 
 [profile.release]
 lto = "fat"

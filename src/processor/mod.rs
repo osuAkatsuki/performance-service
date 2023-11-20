@@ -23,6 +23,7 @@ use conceptual_rework::{
     Beatmap as ConceptualBeatmap, BeatmapExt as ConceptualBeatmapExt,
     GameMode as ConceptualGameMode,
 };
+use cursordance::Beatmap as CdBeatmap;
 use skill_rebalance::{
     Beatmap as SkillRebalanceBeatmap, BeatmapExt as SkillRebalanceBeatmapExt,
     GameMode as SkillRebalanceGameMode,
@@ -119,6 +120,29 @@ async fn calculate_woot_precision_pp(
     Ok(pp)
 }
 
+async fn calculate_cursordance_pp(
+    score: &RippleScore,
+    context: Arc<Context>,
+) -> anyhow::Result<f32> {
+    let beatmap_bytes =
+        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, context).await?;
+    let beatmap = CdBeatmap::from_bytes(&beatmap_bytes).await?;
+
+    let result = cursordance::osu_2019::OsuPP::new(&beatmap)
+        .mods(score.mods as u32)
+        .combo(score.max_combo as usize)
+        .misses(score.count_misses as usize)
+        .accuracy(score.accuracy)
+        .calculate();
+
+    let mut pp = round(result.pp as f32, 2);
+    if pp.is_infinite() || pp.is_nan() {
+        pp = 0.0;
+    }
+
+    Ok(pp)
+}
+
 async fn process_scores(
     rework: &Rework,
     scores: Vec<RippleScore>,
@@ -132,6 +156,7 @@ async fn process_scores(
             12 => calculate_conceptual_pp(score, context.clone()).await?,
             13 => calculate_skill_rebalance_pp(score, context.clone()).await?,
             15 => calculate_woot_precision_pp(score, context.clone()).await?,
+            16 => calculate_cursordance_pp(score, context.clone()).await?,
             _ => unreachable!(),
         };
 
