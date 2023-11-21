@@ -378,6 +378,8 @@ async fn rmq_listen(context: Arc<Context>) -> anyhow::Result<()> {
                 log::error!("Error processing queue request: {:?}", result);
             }
         }
+
+        tokio::time::sleep(Duration::from_millis(100)).await;
     }
 
     Ok(())
