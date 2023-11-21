@@ -367,19 +367,16 @@ async fn rmq_listen(context: Arc<Context>) -> anyhow::Result<()> {
                 deserialized_data.rework_id
             );
 
-            let context_clone = context.clone();
-            tokio::spawn(async move {
-                let result = handle_queue_request(
-                    deserialized_data,
-                    context_clone,
-                    delivery.delivery_tag.clone(),
-                )
-                .await;
+            let result = handle_queue_request(
+                deserialized_data,
+                context.clone(),
+                delivery.delivery_tag.clone(),
+            )
+            .await;
 
-                if result.is_err() {
-                    log::error!("Error processing queue request: {:?}", result);
-                }
-            });
+            if result.is_err() {
+                log::error!("Error processing queue request: {:?}", result);
+            }
         }
     }
 
