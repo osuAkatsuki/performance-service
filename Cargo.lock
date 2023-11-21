@@ -56,6 +56,14 @@ dependencies = [
 [[package]]
 name = "akatsuki-pp"
 version = "0.9.6"
+source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=41b335b3c54cf2188b1569b74a4a5de83918dc30#41b335b3c54cf2188b1569b74a4a5de83918dc30"
+dependencies = [
+ "tokio",
+]
+
+[[package]]
+name = "akatsuki-pp"
+version = "0.9.6"
 source = "git+https://github.com/CursorDance/akatsuki-pp-rs?rev=56a71011e13274e63f6548611f3d5c822377c0d3#56a71011e13274e63f6548611f3d5c822377c0d3"
 dependencies = [
  "tokio",
@@ -65,14 +73,6 @@ dependencies = [
 name = "akatsuki-pp"
 version = "0.9.6"
 source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=a8b4eaffb2274d2e86ff042b7327286e13b6488d#a8b4eaffb2274d2e86ff042b7327286e13b6488d"
-dependencies = [
- "tokio",
-]
-
-[[package]]
-name = "akatsuki-pp"
-version = "0.9.6"
-source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=d3f8c699cbc5c09601e6b4a787caed891420e4cb#d3f8c699cbc5c09601e6b4a787caed891420e4cb"
 dependencies = [
  "tokio",
 ]
@@ -1857,9 +1857,9 @@ version = "0.1.0"
 dependencies = [
  "akatsuki-pp 0.9.3",
  "akatsuki-pp 0.9.4",
+ "akatsuki-pp 0.9.6 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=41b335b3c54cf2188b1569b74a4a5de83918dc30)",
  "akatsuki-pp 0.9.6 (git+https://github.com/CursorDance/akatsuki-pp-rs?rev=56a71011e13274e63f6548611f3d5c822377c0d3)",
  "akatsuki-pp 0.9.6 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=a8b4eaffb2274d2e86ff042b7327286e13b6488d)",
- "akatsuki-pp 0.9.6 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=d3f8c699cbc5c09601e6b4a787caed891420e4cb)",
  "anyhow",
  "async-trait",
  "axum",
