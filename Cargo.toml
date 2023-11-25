@@ -51,7 +51,7 @@ skill-rebalance = { package = "akatsuki-pp", git = "https://github.com/osuAkatsu
 ] }
 rust-s3 = "0.33.0"
 structured-logger = "1.0.3"
-woot-precision = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "565a60ea7caf4dc72765b6cfc2891c2839a61b4e", features = [
+woot-precision = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "9607e63c06927fee0cf2f94ce3a2039e3713387c", features = [
     "async_tokio",
 ] }
 cursordance = { package = "akatsuki-pp", git = "https://github.com/CursorDance/akatsuki-pp-rs", rev = "56a71011e13274e63f6548611f3d5c822377c0d3", features = [
