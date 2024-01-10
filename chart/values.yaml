@@ -8,15 +8,15 @@ apps:
         repository: osuakatsuki/performance-service
         tag: latest
       port: 80
-      readinessProbe:
-        httpGet:
-          path: /_health
-          port: 80
-        initialDelaySeconds: 10
-        periodSeconds: 10
-        timeoutSeconds: 1
-        successThreshold: 1
-        failureThreshold: 3
+      # readinessProbe:
+      #   httpGet:
+      #     path: /_health
+      #     port: 80
+      #   initialDelaySeconds: 10
+      #   periodSeconds: 10
+      #   timeoutSeconds: 1
+      #   successThreshold: 1
+      #   failureThreshold: 3
       env:
         - name: APP_COMPONENT
           value: api
