@@ -57,6 +57,9 @@ woot-precision = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuk
 cursordance = { package = "akatsuki-pp", git = "https://github.com/CursorDance/akatsuki-pp-rs", rev = "56a71011e13274e63f6548611f3d5c822377c0d3", features = [
     "async_tokio",
 ] }
+no-accuracy = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "d3ab5af7a63f17a2a40bbce573b06ea451375638", features = [
+    "async_tokio",
+] }
 
 [profile.release]
 lto = "fat"
