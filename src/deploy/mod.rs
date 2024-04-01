@@ -258,7 +258,7 @@ fn calculate_new_pp(scores: &Vec<RippleScore>, score_count: i32) -> i32 {
     }
 
     // bonus pp
-    total_pp += 416.6667 * (1.0 - 0.9994_f32.powi(score_count as i32));
+    total_pp += 416.6667 * (1.0 - 0.995_f32.powi(score_count as i32));
 
     total_pp.round() as i32
 }
@@ -399,7 +399,7 @@ async fn recalculate_user(
 
     let score_count: i32 = sqlx::query_scalar(
         &format!(
-            "SELECT COUNT(s.id) FROM {} s INNER JOIN beatmaps USING(beatmap_md5) WHERE userid = ? AND completed = 3 AND play_mode = ? AND ranked IN (3, 2) LIMIT 25397",
+            "SELECT COUNT(s.id) FROM {} s INNER JOIN beatmaps USING(beatmap_md5) WHERE userid = ? AND completed = 3 AND play_mode = ? AND ranked IN (3, 2) LIMIT 1000",
             scores_table
         )
     )

@@ -24,12 +24,12 @@ use conceptual_rework::{
     GameMode as ConceptualGameMode,
 };
 use cursordance::Beatmap as CdBeatmap;
+use no_accuracy::Beatmap as NoAccuracyBeatmap;
 use skill_rebalance::{
     Beatmap as SkillRebalanceBeatmap, BeatmapExt as SkillRebalanceBeatmapExt,
     GameMode as SkillRebalanceGameMode,
 };
 use woot_precision::Beatmap as WootBeatmap;
-use no_accuracy::Beatmap as NoAccuracyBeatmap;
 
 fn round(x: f32, decimals: u32) -> f32 {
     let y = 10i32.pow(decimals) as f32;
@@ -202,7 +202,7 @@ fn calculate_new_pp(scores: &Vec<ReworkScore>, score_count: i32) -> i32 {
     }
 
     // bonus pp
-    total_pp += 416.6667 * (1.0 - 0.9994_f32.powi(score_count as i32));
+    total_pp += 416.6667 * (1.0 - 0.995_f32.powi(score_count as i32));
 
     total_pp.round() as i32
 }
@@ -251,7 +251,7 @@ async fn handle_queue_request(
 
     let score_count: i32 = sqlx::query_scalar(
         &format!(
-            "SELECT COUNT(s.id) FROM {} s INNER JOIN beatmaps USING(beatmap_md5) WHERE userid = ? AND completed = 3 AND play_mode = ? AND ranked IN (3, 2) LIMIT 25397",
+            "SELECT COUNT(s.id) FROM {} s INNER JOIN beatmaps USING(beatmap_md5) WHERE userid = ? AND completed = 3 AND play_mode = ? AND ranked IN (3, 2) LIMIT 1000",
             scores_table
         )
     )
