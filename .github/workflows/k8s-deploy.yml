@@ -72,6 +72,10 @@ jobs:
           token: ${{ secrets.COMMON_HELM_CHARTS_PAT_2024 }}
           path: common-helm-charts
 
+      - name: Clear pending deployments
+        run: |
+          kubectl delete secret -l 'status in (pending-install, pending-upgrade, pending-rollback),name=performance-service-production'
+
       - name: Show manifest diff since previous release
         run: |
           helm diff upgrade \
