@@ -208,12 +208,18 @@ async fn recalculate_mode_scores(
     rx: i32,
     ctx: Arc<Context>,
     recalc_ctx: Arc<Mutex<RecalculateContext>>,
+    mods_value: Option<i32>,
 ) -> anyhow::Result<()> {
     let scores_table = match rx {
         0 => "scores",
         1 => "scores_relax",
         2 => "scores_ap",
         _ => unreachable!(),
+    };
+
+    let mods_query_str = match mods_value {
+        Some(mods) => format!("AND (mods & {}) > 0", mods),
+        None => "".to_string(),
     };
 
     let scores: Vec<RippleScore> = sqlx::query_as(
@@ -228,8 +234,10 @@ async fn recalculate_mode_scores(
             WHERE 
                 completed IN (2, 3) 
                 AND play_mode = ? 
+                {} 
             ORDER BY pp DESC",
-            scores_table
+            scores_table,
+            mods_query_str,
         )
     )
     .bind(mode)
@@ -575,6 +583,29 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
     print!("\n");
     std::io::stdout().flush()?;
 
+    print!("Mod value recalc only (y/n): ");
+    std::io::stdout().flush()?;
+
+    let mut mod_recalc_value_only_str = String::new();
+    std::io::stdin().read_line(&mut mod_recalc_value_only_str)?;
+    let mod_recalc_value_only = mod_recalc_value_only_str.to_lowercase().trim() == "y";
+
+    print!("\n");
+    std::io::stdout().flush()?;
+
+    let mut mods_value: Option<i32> = None;
+    if mod_recalc_value_only {
+        print!("Mods value (int): ");
+        std::io::stdout().flush()?;
+
+        let mut mods_value_str = String::new();
+        std::io::stdin().read_line(&mut mods_value_str)?;
+        mods_value = Some(mods_value_str.parse::<i32>().expect("failed to parse mods"));
+
+        print!("\n");
+        std::io::stdout().flush()?;
+    }
+
     let recalculate_context = Arc::new(Mutex::new(RecalculateContext {
         beatmaps: HashMap::new(),
     }));
@@ -595,12 +626,19 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
                         rx.clone(),
                         context_arc.clone(),
                         recalculate_context.clone(),
+                        mods_value,
                     )
                     .await?;
                 }
             } else {
-                recalculate_mode_scores(mode, 0, context_arc.clone(), recalculate_context.clone())
-                    .await?;
+                recalculate_mode_scores(
+                    mode,
+                    0,
+                    context_arc.clone(),
+                    recalculate_context.clone(),
+                    mods_value,
+                )
+                .await?;
             }
         }
     }
