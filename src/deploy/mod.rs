@@ -600,7 +600,12 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
 
         let mut mods_value_str = String::new();
         std::io::stdin().read_line(&mut mods_value_str)?;
-        mods_value = Some(mods_value_str.parse::<i32>().expect("failed to parse mods"));
+        mods_value = Some(
+            mods_value_str
+                .trim()
+                .parse::<i32>()
+                .expect("failed to parse mods"),
+        );
 
         print!("\n");
         std::io::stdout().flush()?;
