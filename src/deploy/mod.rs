@@ -565,31 +565,43 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
     print!("\n");
     std::io::stdout().flush()?;
 
+    print!("Total PP recalc only (y/n): ");
+    std::io::stdout().flush()?;
+
+    let mut total_only_str = String::new();
+    std::io::stdin().read_line(&mut total_only_str)?;
+    let total_only = total_only_str.to_lowercase().trim() == "y";
+
+    print!("\n");
+    std::io::stdout().flush()?;
+
     let recalculate_context = Arc::new(Mutex::new(RecalculateContext {
         beatmaps: HashMap::new(),
     }));
 
     let context_arc = Arc::new(context);
 
-    for mode in &modes {
-        let mode = mode.clone();
+    if !total_only {
+        for mode in &modes {
+            let mode = mode.clone();
 
-        let rx = vec![0, 1, 2].contains(&mode);
-        let ap = mode == 0;
+            let rx = vec![0, 1, 2].contains(&mode);
+            let ap = mode == 0;
 
-        if rx || ap {
-            for rx in &relax_bits {
-                recalculate_mode_scores(
-                    mode,
-                    rx.clone(),
-                    context_arc.clone(),
-                    recalculate_context.clone(),
-                )
-                .await?;
+            if rx || ap {
+                for rx in &relax_bits {
+                    recalculate_mode_scores(
+                        mode,
+                        rx.clone(),
+                        context_arc.clone(),
+                        recalculate_context.clone(),
+                    )
+                    .await?;
+                }
+            } else {
+                recalculate_mode_scores(mode, 0, context_arc.clone(), recalculate_context.clone())
+                    .await?;
             }
-        } else {
-            recalculate_mode_scores(mode, 0, context_arc.clone(), recalculate_context.clone())
-                .await?;
         }
     }
 
