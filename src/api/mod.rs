@@ -18,6 +18,7 @@ fn api_router() -> Router {
         .merge(routes::reworks::leaderboard::router())
         .merge(routes::reworks::sessions::router())
         .merge(routes::reworks::search::router())
+        .merge(routes::health::router())
 }
 
 pub async fn serve(ctx: Context) -> anyhow::Result<()> {
@@ -30,7 +31,10 @@ pub async fn serve(ctx: Context) -> anyhow::Result<()> {
             .layer(AddExtensionLayer::new(Arc::new(ctx))),
     );
 
-    log::info!("serving on {}", server_port);
+    log::info!(
+        port = server_port;
+        "Serving API",
+    );
     axum::Server::bind(&format!("{}:{}", server_host, server_port).parse()?)
         .serve(app.into_make_service())
         .await?;

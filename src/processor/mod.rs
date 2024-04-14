@@ -185,7 +185,10 @@ async fn process_scores(
             _ => unreachable!(),
         };
 
-        log::info!("Recalculated PP for score ID {}", score.id);
+        log::info!(
+            score_id = score.id;
+            "Recalculated PP for score",
+        );
 
         let rework_score = ReworkScore::from_ripple_score(score, rework.rework_id, new_pp);
         rework_scores.push(rework_score);
@@ -351,9 +354,9 @@ async fn handle_queue_request(
         .await?;
 
     log::info!(
-        "Processed recalculation for user ID {} on rework {}",
-        request.user_id,
-        rework.rework_name
+        user_id = request.user_id,
+        rework_name = rework.rework_name;
+        "Processed recalculation for user on rework",
     );
 
     Ok(())
@@ -392,16 +395,19 @@ async fn rmq_listen(context: Arc<Context>) -> anyhow::Result<()> {
                 deserialized_data.rework_id
             );
 
-            let result = handle_queue_request(
-                deserialized_data,
-                context.clone(),
-                delivery.delivery_tag.clone(),
-            )
-            .await;
+            let context_clone = context.clone();
+            tokio::spawn(async move {
+                let result = handle_queue_request(
+                    deserialized_data,
+                    context_clone,
+                    delivery.delivery_tag.clone(),
+                )
+                .await;
 
-            if result.is_err() {
-                log::error!("Error processing queue request: {:?}", result);
-            }
+                if result.is_err() {
+                    log::error!(error = result.unwrap_err().to_string(); "Error processing queue request");
+                }
+            });
         }
 
         tokio::time::sleep(Duration::from_millis(100)).await;

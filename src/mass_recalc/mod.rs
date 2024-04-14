@@ -80,7 +80,10 @@ async fn queue_user(user_id: i32, rework: &Rework, context: &Context) -> anyhow:
         )
         .await?;
 
-    log::info!("Queued user ID {}", user_id);
+    log::info!(
+        user_id = user_id;
+        "Queued user",
+    );
     Ok(())
 }
 
@@ -95,7 +98,10 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
     print!("\n");
     std::io::stdout().flush()?;
 
-    log::info!("Mass recalculating on rework ID {}", rework_id);
+    log::info!(
+        rework_id = rework_id;
+        "Mass recalculating on rework",
+    );
 
     let rework = usecases::reworks::fetch_one(rework_id, Arc::from(context.clone()))
         .await?
