@@ -56,14 +56,6 @@ dependencies = [
 [[package]]
 name = "akatsuki-pp"
 version = "0.9.6"
-source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=565a60ea7caf4dc72765b6cfc2891c2839a61b4e#565a60ea7caf4dc72765b6cfc2891c2839a61b4e"
-dependencies = [
- "tokio",
-]
-
-[[package]]
-name = "akatsuki-pp"
-version = "0.9.6"
 source = "git+https://github.com/CursorDance/akatsuki-pp-rs?rev=56a71011e13274e63f6548611f3d5c822377c0d3#56a71011e13274e63f6548611f3d5c822377c0d3"
 dependencies = [
  "tokio",
@@ -72,7 +64,23 @@ dependencies = [
 [[package]]
 name = "akatsuki-pp"
 version = "0.9.6"
-source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=a8b4eaffb2274d2e86ff042b7327286e13b6488d#a8b4eaffb2274d2e86ff042b7327286e13b6488d"
+source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=5c97207f25cf9fd07252dca1ba68d785e2147ce1#5c97207f25cf9fd07252dca1ba68d785e2147ce1"
+dependencies = [
+ "tokio",
+]
+
+[[package]]
+name = "akatsuki-pp"
+version = "0.9.6"
+source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=9607e63c06927fee0cf2f94ce3a2039e3713387c#9607e63c06927fee0cf2f94ce3a2039e3713387c"
+dependencies = [
+ "tokio",
+]
+
+[[package]]
+name = "akatsuki-pp"
+version = "0.9.6"
+source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=d3ab5af7a63f17a2a40bbce573b06ea451375638#d3ab5af7a63f17a2a40bbce573b06ea451375638"
 dependencies = [
  "tokio",
 ]
@@ -1857,9 +1865,10 @@ version = "0.1.0"
 dependencies = [
  "akatsuki-pp 0.9.3",
  "akatsuki-pp 0.9.4",
- "akatsuki-pp 0.9.6 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=565a60ea7caf4dc72765b6cfc2891c2839a61b4e)",
  "akatsuki-pp 0.9.6 (git+https://github.com/CursorDance/akatsuki-pp-rs?rev=56a71011e13274e63f6548611f3d5c822377c0d3)",
- "akatsuki-pp 0.9.6 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=a8b4eaffb2274d2e86ff042b7327286e13b6488d)",
+ "akatsuki-pp 0.9.6 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=5c97207f25cf9fd07252dca1ba68d785e2147ce1)",
+ "akatsuki-pp 0.9.6 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=9607e63c06927fee0cf2f94ce3a2039e3713387c)",
+ "akatsuki-pp 0.9.6 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=d3ab5af7a63f17a2a40bbce573b06ea451375638)",
  "anyhow",
  "async-trait",
  "axum",
