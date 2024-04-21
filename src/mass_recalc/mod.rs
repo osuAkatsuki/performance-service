@@ -20,8 +20,8 @@ async fn queue_user(user_id: i32, rework: &Rework, context: &Context) -> anyhow:
     };
 
     let last_score_time: Option<i32> = sqlx::query_scalar(&format!(
-        "SELECT max(time) FROM {} INNER JOIN beatmaps USING(beatmap_md5) 
-        WHERE userid = ? AND completed = 3 AND ranked IN (2, 3) AND play_mode = ? 
+        "SELECT max(time) FROM {} INNER JOIN beatmaps USING(beatmap_md5)
+        WHERE userid = ? AND completed = 3 AND ranked IN (2, 3) AND play_mode = ?
         ORDER BY pp DESC LIMIT 100",
         scores_table
     ))
@@ -127,24 +127,18 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
         .del(format!("rework:leaderboard:{}", rework_id))
         .await?;
 
-    let stats_prefix = match rework.mode {
-        0 => "std",
-        1 => "taiko",
-        2 => "ctb",
-        3 => "mania",
-        _ => unreachable!(),
-    };
-
-    let stats_table = match rework.rx {
-        0 => "users_stats",
-        1 => "rx_stats",
-        2 => "ap_stats",
-        _ => unreachable!(),
-    };
-
-    let user_ids: Vec<(i32,)> = sqlx::query_as(&format!("SELECT users.id, pp_{} pp FROM {} INNER JOIN users USING(id) WHERE pp_{} > 0 AND users.privileges & 1 ORDER BY pp desc", stats_prefix, stats_table, stats_prefix))
-        .fetch_all(context.database.get().await?.deref_mut())
-        .await?;
+    let user_ids: Vec<(i32,)> = sqlx::query_as(&format!(
+        "SELECT users.id, pp
+        FROM user_stats
+        INNER JOIN users ON users.id = user_stats.user_id
+        WHERE pp > 0 AND mode = ?
+        AND users.privileges & 1
+        ORDER BY pp DESC
+        "
+    ))
+    .bind(rework.mode + (rework.rx * 4))
+    .fetch_all(context.database.get().await?.deref_mut())
+    .await?;
 
     for (user_id,) in user_ids {
         queue_user(user_id, &rework, &context).await?;

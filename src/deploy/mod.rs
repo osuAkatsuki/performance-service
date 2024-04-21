@@ -451,7 +451,7 @@ async fn recalculate_user(
     .await?;
 
     let (country, user_privileges): (String, i32) = sqlx::query_as(
-        "SELECT country, privileges FROM users INNER JOIN users_stats USING(id) WHERE id = ?",
+        "SELECT country, privileges FROM users WHERE id = ?",
     )
     .bind(user_id)
     .fetch_one(ctx.database.get().await?.deref_mut())
