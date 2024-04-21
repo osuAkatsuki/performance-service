@@ -418,29 +418,6 @@ async fn recalculate_user(
 
     let new_pp = calculate_new_pp(&scores, score_count);
 
-    let stats_table = match rx {
-        0 => "users_stats",
-        1 => "rx_stats",
-        2 => "ap_stats",
-        _ => unreachable!(),
-    };
-
-    let stats_prefix = match mode {
-        0 => "std",
-        1 => "taiko",
-        2 => "ctb",
-        3 => "mania",
-        _ => unreachable!(),
-    };
-
-    sqlx::query(&format!(
-        "UPDATE {} SET pp_{} = ? WHERE id = ?",
-        stats_table, stats_prefix
-    ))
-    .bind(new_pp)
-    .bind(user_id)
-    .execute(ctx.database.get().await?.deref_mut())
-    .await?;
     sqlx::query(&format!(
         "UPDATE user_stats SET pp = ? WHERE user_id = ? AND mode = ?",
     ))
