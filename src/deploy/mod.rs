@@ -446,7 +446,7 @@ async fn recalculate_user(
     ))
     .bind(new_pp)
     .bind(user_id)
-    .bind(mode)
+    .bind(mode + (4 * rx))
     .execute(ctx.database.get().await?.deref_mut())
     .await?;
 
