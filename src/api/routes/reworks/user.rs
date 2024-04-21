@@ -30,18 +30,17 @@ async fn get_rework_user(
     ctx: Extension<Arc<Context>>,
     Path(user_id): Path<i32>,
 ) -> AppResult<Json<Option<ReworkUser>>> {
-    let stats: Option<(String, String)> = sqlx::query_as(
-        "SELECT users.username, country FROM users INNER JOIN users_stats USING(id) WHERE id = ?",
-    )
-    .bind(user_id)
-    .fetch_optional(ctx.database.get().await?.deref_mut())
-    .await?;
+    let user_info: Option<(String, String)> =
+        sqlx::query_as("SELECT username, country FROM users WHERE id = ?")
+            .bind(user_id)
+            .fetch_optional(ctx.database.get().await?.deref_mut())
+            .await?;
 
-    if stats.is_none() {
+    if user_info.is_none() {
         return Ok(Json(None));
     }
 
-    let (user_name, country) = stats.unwrap();
+    let (user_name, country) = user_info.unwrap();
 
     let rework_stats: Vec<ReworkStats> =
         sqlx::query_as("SELECT * FROM rework_stats WHERE user_id = ?")
@@ -90,12 +89,11 @@ async fn get_rework_stats(
 
     let stats = stats.unwrap();
 
-    let user_info: (String, String) = sqlx::query_as(
-        "SELECT users_stats.country, users.username FROM users_stats INNER JOIN users USING(id) WHERE users_stats.id = ?"
-    )
-        .bind(user_id)
-        .fetch_one(ctx.database.get().await?.deref_mut())
-        .await?;
+    let user_info: (String, String) =
+        sqlx::query_as("SELECT username, country FROM users WHERE id = ?")
+            .bind(user_id)
+            .fetch_one(ctx.database.get().await?.deref_mut())
+            .await?;
 
     let mut redis_connection = ctx.redis.get_async_connection().await?;
 

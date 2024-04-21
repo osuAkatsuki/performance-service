@@ -230,19 +230,19 @@ async fn handle_queue_request(
 
     let scores: Vec<RippleScore> = sqlx::query_as(
         &format!(
-            "SELECT s.id, s.beatmap_md5, s.userid, s.score, s.max_combo, s.full_combo, s.mods, s.300_count, 
-            s.100_count, s.50_count, s.katus_count, s.gekis_count, s.misses_count, s.time, s.play_mode, s.completed, 
-            s.accuracy, s.pp, s.checksum, s.patcher, s.pinned, b.beatmap_id, b.beatmapset_id, b.song_name 
-            FROM {} s 
-            INNER JOIN 
-                beatmaps b 
-                USING(beatmap_md5) 
-            WHERE 
-                userid = ? 
-                AND completed = 3 
-                AND play_mode = ? 
-                AND ranked IN (3, 2) 
-            ORDER BY pp DESC 
+            "SELECT s.id, s.beatmap_md5, s.userid, s.score, s.max_combo, s.full_combo, s.mods, s.300_count,
+            s.100_count, s.50_count, s.katus_count, s.gekis_count, s.misses_count, s.time, s.play_mode, s.completed,
+            s.accuracy, s.pp, s.checksum, s.patcher, s.pinned, b.beatmap_id, b.beatmapset_id, b.song_name
+            FROM {} s
+            INNER JOIN
+                beatmaps b
+                USING(beatmap_md5)
+            WHERE
+                userid = ?
+                AND completed = 3
+                AND play_mode = ?
+                AND ranked IN (3, 2)
+            ORDER BY pp DESC
             LIMIT 100",
             scores_table
         )
@@ -268,8 +268,8 @@ async fn handle_queue_request(
 
     for rework_score in rework_scores {
         sqlx::query(
-            "REPLACE INTO rework_scores (score_id, beatmap_id, beatmapset_id, user_id, rework_id, max_combo, 
-            mods, accuracy, score, num_300s, num_100s, num_50s, num_gekis, num_katus, num_misses, old_pp, new_pp) 
+            "REPLACE INTO rework_scores (score_id, beatmap_id, beatmapset_id, user_id, rework_id, max_combo,
+            mods, accuracy, score, num_300s, num_100s, num_50s, num_gekis, num_katus, num_misses, old_pp, new_pp)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(rework_score.score_id)
@@ -293,28 +293,12 @@ async fn handle_queue_request(
         .await?;
     }
 
-    let stats_table = match rework.rx {
-        0 => "users_stats",
-        1 => "rx_stats",
-        2 => "ap_stats",
-        _ => unreachable!(),
-    };
-
-    let stats_prefix = match rework.mode {
-        0 => "std",
-        1 => "taiko",
-        2 => "ctb",
-        3 => "mania",
-        _ => unreachable!(),
-    };
-
-    let old_pp: i32 = sqlx::query_scalar(&format!(
-        r#"SELECT pp_{} FROM {} WHERE id = ?"#,
-        stats_prefix, stats_table
-    ))
-    .bind(request.user_id)
-    .fetch_one(context.database.get().await?.deref_mut())
-    .await?;
+    let old_pp: i32 =
+        sqlx::query_scalar(r#"SELECT pp FROM user_stats WHERE user_id = ? AND mode = ?"#)
+            .bind(request.user_id)
+            .bind(rework.mode + (rework.rx * 4))
+            .fetch_one(context.database.get().await?.deref_mut())
+            .await?;
 
     let rework_stats = ReworkStats {
         user_id: request.user_id,

@@ -35,19 +35,16 @@ impl LeaderboardsRepository {
                 .await?;
 
         let rework_users: Vec<APIReworkStats> = sqlx::query_as(
-            "SELECT user_id, users_stats.country, users.username user_name, rework_id, old_pp, new_pp, 
-            DENSE_RANK() OVER (ORDER BY old_pp DESC) old_rank, DENSE_RANK() OVER (ORDER BY new_pp DESC) new_rank 
-            FROM 
-                rework_stats 
-            INNER JOIN 
-                users_stats
-                ON users_stats.id = rework_stats.user_id
+            "SELECT user_id, country, users.username user_name, rework_id, old_pp, new_pp,
+            DENSE_RANK() OVER (ORDER BY old_pp DESC) old_rank, DENSE_RANK() OVER (ORDER BY new_pp DESC) new_rank
+            FROM
+                rework_stats
             INNER JOIN
                 users
                 ON users.id = rework_stats.user_id
-            WHERE 
+            WHERE
                 rework_id = ?
-            ORDER BY 
+            ORDER BY
                 new_pp DESC
             LIMIT ?, ?"
         )
