@@ -224,17 +224,17 @@ async fn recalculate_mode_scores(
 
     let scores: Vec<RippleScore> = sqlx::query_as(
         &format!(
-            "SELECT s.id, s.beatmap_md5, s.userid, s.score, s.max_combo, s.full_combo, s.mods, s.300_count, 
-            s.100_count, s.50_count, s.katus_count, s.gekis_count, s.misses_count, s.time, s.play_mode, s.completed, 
-            s.accuracy, s.pp, s.checksum, s.patcher, s.pinned, b.beatmap_id, b.beatmapset_id, b.song_name  
-            FROM {} s 
-            INNER JOIN 
-                beatmaps b 
-                USING(beatmap_md5) 
-            WHERE 
-                completed IN (2, 3) 
-                AND play_mode = ? 
-                {} 
+            "SELECT s.id, s.beatmap_md5, s.userid, s.score, s.max_combo, s.full_combo, s.mods, s.300_count,
+            s.100_count, s.50_count, s.katus_count, s.gekis_count, s.misses_count, s.time, s.play_mode, s.completed,
+            s.accuracy, s.pp, s.checksum, s.patcher, s.pinned, b.beatmap_id, b.beatmapset_id, b.song_name
+            FROM {} s
+            INNER JOIN
+                beatmaps b
+                USING(beatmap_md5)
+            WHERE
+                completed IN (2, 3)
+                AND play_mode = ?
+                {}
             ORDER BY pp DESC",
             scores_table,
             mods_query_str,
@@ -383,19 +383,19 @@ async fn recalculate_user(
 
     let scores: Vec<RippleScore> = sqlx::query_as(
         &format!(
-            "SELECT s.id, s.beatmap_md5, s.userid, s.score, s.max_combo, s.full_combo, s.mods, s.300_count, 
-            s.100_count, s.50_count, s.katus_count, s.gekis_count, s.misses_count, s.time, s.play_mode, s.completed, 
-            s.accuracy, s.pp, s.checksum, s.patcher, s.pinned, b.beatmap_id, b.beatmapset_id, b.song_name 
-            FROM {} s 
-            INNER JOIN 
-                beatmaps b 
-                USING(beatmap_md5) 
-            WHERE 
-                userid = ? 
-                AND completed = 3 
-                AND play_mode = ? 
-                AND ranked IN (3, 2) 
-            ORDER BY pp DESC 
+            "SELECT s.id, s.beatmap_md5, s.userid, s.score, s.max_combo, s.full_combo, s.mods, s.300_count,
+            s.100_count, s.50_count, s.katus_count, s.gekis_count, s.misses_count, s.time, s.play_mode, s.completed,
+            s.accuracy, s.pp, s.checksum, s.patcher, s.pinned, b.beatmap_id, b.beatmapset_id, b.song_name
+            FROM {} s
+            INNER JOIN
+                beatmaps b
+                USING(beatmap_md5)
+            WHERE
+                userid = ?
+                AND completed = 3
+                AND play_mode = ?
+                AND ranked IN (3, 2)
+            ORDER BY pp DESC
             LIMIT 100",
             scores_table
         )
@@ -441,6 +441,14 @@ async fn recalculate_user(
     .bind(user_id)
     .execute(ctx.database.get().await?.deref_mut())
     .await?;
+    sqlx::query(&format!(
+        "UPDATE user_stats SET pp = ? WHERE user_id = ? AND mode = ?",
+    ))
+    .bind(new_pp)
+    .bind(user_id)
+    .bind(mode)
+    .execute(ctx.database.get().await?.deref_mut())
+    .await?;
 
     let (country, user_privileges): (String, i32) = sqlx::query_as(
         "SELECT country, privileges FROM users INNER JOIN users_stats USING(id) WHERE id = ?",
@@ -450,8 +458,8 @@ async fn recalculate_user(
     .await?;
 
     let last_score_time: Option<i32> = sqlx::query_scalar(&format!(
-        "SELECT max(time) FROM {} INNER JOIN beatmaps USING(beatmap_md5) 
-            WHERE userid = ? AND completed = 3 AND ranked IN (2, 3) AND play_mode = ? 
+        "SELECT max(time) FROM {} INNER JOIN beatmaps USING(beatmap_md5)
+            WHERE userid = ? AND completed = 3 AND ranked IN (2, 3) AND play_mode = ?
             ORDER BY pp DESC LIMIT 100",
         scores_table
     ))
