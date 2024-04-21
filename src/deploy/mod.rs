@@ -469,6 +469,14 @@ async fn recalculate_user(
             _ => unreachable!(),
         };
 
+        let stats_prefix = match mode {
+            0 => "std",
+            1 => "taiko",
+            2 => "ctb",
+            3 => "mania",
+            _ => unreachable!(),
+        };
+
         redis_connection
             .zadd(
                 format!("ripple:{}:{}", redis_leaderboard, stats_prefix),
