@@ -127,15 +127,14 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
         .del(format!("rework:leaderboard:{}", rework_id))
         .await?;
 
-    let user_ids: Vec<(i32,)> = sqlx::query_as(&format!(
+    let user_ids: Vec<(i32,)> = sqlx::query_as(
         "SELECT users.id, pp
         FROM user_stats
         INNER JOIN users ON users.id = user_stats.user_id
         WHERE pp > 0 AND mode = ?
         AND users.privileges & 1
-        ORDER BY pp DESC
-        "
-    ))
+        ORDER BY pp DESC",
+    )
     .bind(rework.mode + (rework.rx * 4))
     .fetch_all(context.database.get().await?.deref_mut())
     .await?;
