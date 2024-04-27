@@ -59,6 +59,9 @@ cursordance = { package = "akatsuki-pp", git = "https://github.com/CursorDance/a
 no-accuracy = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "d3ab5af7a63f17a2a40bbce573b06ea451375638", features = [
     "async_tokio",
 ] }
+simplify-relax = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "ce896ca661de4aa4c0c6739a703c4a162426878b", features = [
+    "async_tokio",
+] }
 
 [profile.release]
 lto = "fat"
