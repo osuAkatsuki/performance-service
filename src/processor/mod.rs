@@ -318,7 +318,7 @@ async fn handle_queue_request(
         .await?;
     }
 
-    let old_pp: i32 =
+    let old_pp: u32 =
         sqlx::query_scalar(r#"SELECT pp FROM user_stats WHERE user_id = ? AND mode = ?"#)
             .bind(request.user_id)
             .bind(rework.mode + (rework.rx * 4))
@@ -328,7 +328,7 @@ async fn handle_queue_request(
     let rework_stats = ReworkStats {
         user_id: request.user_id,
         rework_id: rework.rework_id,
-        old_pp,
+        old_pp: old_pp as i32,
         new_pp,
     };
 
