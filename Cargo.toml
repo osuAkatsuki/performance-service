@@ -65,7 +65,7 @@ simplify-relax = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuk
 improved-miss-penalty = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "588f8fe090bbf262cb86cd95ac9c9c9f35b0da03", features = [
     "async_tokio",
 ] }
-accuracy-fun = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "099528892c2a8183880c0538fe7e454775751cca", features = [
+accuracy-fun = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "879fd8caa2cb082a5b9c0761fc2ddca3b283b226", features = [
     "async_tokio",
 ] }
 
