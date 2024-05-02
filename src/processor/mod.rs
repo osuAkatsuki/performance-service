@@ -19,6 +19,7 @@ use crate::{
     usecases,
 };
 
+use accuracy_fun::Beatmap as AccuracyFunBeatmap;
 use conceptual_rework::{
     Beatmap as ConceptualBeatmap, BeatmapExt as ConceptualBeatmapExt,
     GameMode as ConceptualGameMode,
@@ -215,6 +216,29 @@ async fn calculate_improved_miss_penalty_pp(
     Ok(pp)
 }
 
+async fn calculate_accuracy_fun_pp(
+    score: &RippleScore,
+    context: Arc<Context>,
+) -> anyhow::Result<f32> {
+    let beatmap_bytes =
+        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, context).await?;
+    let beatmap = AccuracyFunBeatmap::from_bytes(&beatmap_bytes).await?;
+
+    let result = accuracy_fun::osu_2019::OsuPP::new(&beatmap)
+        .mods(score.mods as u32)
+        .combo(score.max_combo as usize)
+        .misses(score.count_misses as usize)
+        .accuracy(score.accuracy)
+        .calculate();
+
+    let mut pp = round(result.pp as f32, 2);
+    if pp.is_infinite() || pp.is_nan() {
+        pp = 0.0;
+    }
+
+    Ok(pp)
+}
+
 async fn process_scores(
     rework: &Rework,
     scores: Vec<RippleScore>,
@@ -232,6 +256,7 @@ async fn process_scores(
             17 => calculate_no_accuracy_pp(score, context.clone()).await?,
             18 => calculate_simplfy_relax_pp(score, context.clone()).await?,
             19 => calculate_improved_miss_penalty_pp(score, context.clone()).await?,
+            20 => calculate_accuracy_fun_pp(score, context.clone()).await?,
             _ => unreachable!(),
         };
 
