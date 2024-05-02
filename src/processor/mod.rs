@@ -454,19 +454,16 @@ async fn rmq_listen(context: Arc<Context>) -> anyhow::Result<()> {
                 deserialized_data.rework_id
             );
 
-            let context_clone = context.clone();
-            tokio::spawn(async move {
-                let result = handle_queue_request(
-                    deserialized_data,
-                    context_clone,
-                    delivery.delivery_tag.clone(),
-                )
-                .await;
+            let result = handle_queue_request(
+                deserialized_data,
+                context.clone(),
+                delivery.delivery_tag.clone(),
+            )
+            .await;
 
-                if result.is_err() {
-                    log::error!(error = result.unwrap_err().to_string(); "Error processing queue request");
-                }
-            });
+            if result.is_err() {
+                log::error!(error = result.unwrap_err().to_string(); "Error processing queue request");
+            }
         }
 
         tokio::time::sleep(Duration::from_millis(100)).await;
