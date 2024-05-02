@@ -62,6 +62,9 @@ no-accuracy = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/a
 simplify-relax = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "ce896ca661de4aa4c0c6739a703c4a162426878b", features = [
     "async_tokio",
 ] }
+improved-miss-penalty = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "588f8fe090bbf262cb86cd95ac9c9c9f35b0da03", features = [
+    "async_tokio",
+] }
 
 [profile.release]
 lto = "fat"

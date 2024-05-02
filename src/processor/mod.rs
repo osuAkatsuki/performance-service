@@ -24,6 +24,7 @@ use conceptual_rework::{
     GameMode as ConceptualGameMode,
 };
 use cursordance::Beatmap as CdBeatmap;
+use improved_miss_penalty::Beatmap as ImprovedMissPenaltyBeatmap;
 use no_accuracy::Beatmap as NoAccuracyBeatmap;
 use simplify_relax::Beatmap as SimplifyRelaxBeatmap;
 use skill_rebalance::{
@@ -191,6 +192,29 @@ async fn calculate_simplfy_relax_pp(
     Ok(pp)
 }
 
+async fn calculate_improved_miss_penalty_pp(
+    score: &RippleScore,
+    context: Arc<Context>,
+) -> anyhow::Result<f32> {
+    let beatmap_bytes =
+        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, context).await?;
+    let beatmap = ImprovedMissPenaltyBeatmap::from_bytes(&beatmap_bytes).await?;
+
+    let result = improved_miss_penalty::osu_2019::OsuPP::new(&beatmap)
+        .mods(score.mods as u32)
+        .combo(score.max_combo as usize)
+        .misses(score.count_misses as usize)
+        .accuracy(score.accuracy)
+        .calculate();
+
+    let mut pp = round(result.pp as f32, 2);
+    if pp.is_infinite() || pp.is_nan() {
+        pp = 0.0;
+    }
+
+    Ok(pp)
+}
+
 async fn process_scores(
     rework: &Rework,
     scores: Vec<RippleScore>,
@@ -207,6 +231,7 @@ async fn process_scores(
             16 => calculate_cursordance_pp(score, context.clone()).await?,
             17 => calculate_no_accuracy_pp(score, context.clone()).await?,
             18 => calculate_simplfy_relax_pp(score, context.clone()).await?,
+            19 => calculate_improved_miss_penalty_pp(score, context.clone()).await?,
             _ => unreachable!(),
         };
 
