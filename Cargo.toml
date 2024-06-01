@@ -50,9 +50,6 @@ skill-rebalance = { package = "akatsuki-pp", git = "https://github.com/osuAkatsu
 ] }
 rust-s3 = "0.33.0"
 structured-logger = "1.0.3"
-woot-precision = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "9607e63c06927fee0cf2f94ce3a2039e3713387c", features = [
-    "async_tokio",
-] }
 cursordance = { package = "akatsuki-pp", git = "https://github.com/CursorDance/akatsuki-pp-rs", rev = "56a71011e13274e63f6548611f3d5c822377c0d3", features = [
     "async_tokio",
 ] }
@@ -62,7 +59,7 @@ no-accuracy = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/a
 simplify-relax = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "ce896ca661de4aa4c0c6739a703c4a162426878b", features = [
     "async_tokio",
 ] }
-improved-miss-penalty = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "3c303feaa3e1e26a9c64004b231d56ce7d51d3cb", features = [
+improved-miss-penalty = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "bb1c8ee99a6788f4706fbadee47894590c4fded6", features = [
     "async_tokio",
 ] }
 accuracy-fun = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "879fd8caa2cb082a5b9c0761fc2ddca3b283b226", features = [

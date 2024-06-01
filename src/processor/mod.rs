@@ -32,7 +32,6 @@ use skill_rebalance::{
     Beatmap as SkillRebalanceBeatmap, BeatmapExt as SkillRebalanceBeatmapExt,
     GameMode as SkillRebalanceGameMode,
 };
-use woot_precision::Beatmap as WootBeatmap;
 
 fn round(x: f32, decimals: u32) -> f32 {
     let y = 10i32.pow(decimals) as f32;
@@ -94,29 +93,6 @@ async fn calculate_skill_rebalance_pp(
         .calculate();
 
     let mut pp = round(result.pp() as f32, 2);
-    if pp.is_infinite() || pp.is_nan() {
-        pp = 0.0;
-    }
-
-    Ok(pp)
-}
-
-async fn calculate_woot_precision_pp(
-    score: &RippleScore,
-    context: Arc<Context>,
-) -> anyhow::Result<f32> {
-    let beatmap_bytes =
-        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, context).await?;
-    let beatmap = WootBeatmap::from_bytes(&beatmap_bytes).await?;
-
-    let result = woot_precision::osu_2019::OsuPP::new(&beatmap)
-        .mods(score.mods as u32)
-        .combo(score.max_combo as usize)
-        .misses(score.count_misses as usize)
-        .accuracy(score.accuracy)
-        .calculate();
-
-    let mut pp = round(result.pp as f32, 2);
     if pp.is_infinite() || pp.is_nan() {
         pp = 0.0;
     }
@@ -251,7 +227,6 @@ async fn process_scores(
             10 => calculate_conceptual_pp(score, context.clone()).await?,
             12 => calculate_conceptual_pp(score, context.clone()).await?,
             13 => calculate_skill_rebalance_pp(score, context.clone()).await?,
-            15 => calculate_woot_precision_pp(score, context.clone()).await?,
             16 => calculate_cursordance_pp(score, context.clone()).await?,
             17 => calculate_no_accuracy_pp(score, context.clone()).await?,
             18 => calculate_simplfy_relax_pp(score, context.clone()).await?,
