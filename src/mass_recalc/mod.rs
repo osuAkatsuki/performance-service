@@ -80,10 +80,6 @@ async fn queue_user(user_id: i32, rework: &Rework, context: &Context) -> anyhow:
         )
         .await?;
 
-    log::info!(
-        user_id = user_id;
-        "Queued user",
-    );
     Ok(())
 }
 
@@ -140,7 +136,20 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
     .await?;
 
     for (user_id,) in user_ids {
-        queue_user(user_id, &rework, &context).await?;
+        match queue_user(user_id, &rework, &context).await {
+            Ok(()) => log::info!(
+                user_id = user_id;
+                "Queued user",
+            ),
+            Err(err) => {
+                let err_str = err.to_string();
+                log::info!(
+                    user_id = user_id,
+                    err = err_str;
+                    "Failed to queue user"
+                )
+            }
+        }
     }
 
     Ok(())
