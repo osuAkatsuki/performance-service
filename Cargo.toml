@@ -62,7 +62,7 @@ no-accuracy = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/a
 simplify-relax = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "ce896ca661de4aa4c0c6739a703c4a162426878b", features = [
     "async_tokio",
 ] }
-improved-miss-penalty = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "588f8fe090bbf262cb86cd95ac9c9c9f35b0da03", features = [
+improved-miss-penalty = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "3c303feaa3e1e26a9c64004b231d56ce7d51d3cb", features = [
     "async_tokio",
 ] }
 accuracy-fun = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "879fd8caa2cb082a5b9c0761fc2ddca3b283b226", features = [
