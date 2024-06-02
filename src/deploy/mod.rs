@@ -183,25 +183,6 @@ async fn recalculate_score(
         .execute(ctx.database.get().await?.deref_mut())
         .await?;
 
-    // cache will only contain it if it's their best score
-    if score.completed == 3 {
-        let mut redis_connection = ctx.redis.get_async_connection().await?;
-        redis_connection
-            .publish(
-                "cache:update_score_pp",
-                serde_json::json!({
-                    "beatmap_id": score.beatmap_id,
-                    "user_id": score.userid,
-                    "score_id": score.id,
-                    "new_pp": response.pp,
-                    "mode_vn": score.play_mode,
-                    "relax": rx,
-                })
-                .to_string(),
-            )
-            .await?;
-    }
-
     log::info!(
         score_id = score.id,
         score_mode = score.play_mode,
