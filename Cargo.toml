@@ -65,6 +65,7 @@ improved-miss-penalty = { package = "akatsuki-pp", git = "https://github.com/osu
 accuracy-fun = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "879fd8caa2cb082a5b9c0761fc2ddca3b283b226", features = [
     "async_tokio",
 ] }
+md5 = "0.7.0"
 
 [profile.release]
 lto = "fat"

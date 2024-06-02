@@ -6,6 +6,7 @@ use crate::context::Context;
 
 pub async fn fetch_beatmap_osu_file(
     beatmap_id: i32,
+    beatmap_md5: &str,
     context: Arc<Context>,
 ) -> anyhow::Result<Vec<u8>> {
     let beatmap_path = &format!("beatmaps/{beatmap_id}.osu");
@@ -15,8 +16,17 @@ pub async fn fetch_beatmap_osu_file(
         Err(S3Error::Http(status_code, _)) if status_code == 404 => Ok(None),
         Err(e) => Err(e),
     }?;
-    if existing_file.is_some() {
-        return Ok(existing_file.unwrap().to_vec());
+
+    match existing_file {
+        Some(existing_file) => {
+            let osu_file_data = existing_file.to_vec();
+            let osu_file_data_md5 = format!("{:x}", md5::compute(&osu_file_data));
+
+            if osu_file_data_md5 == beatmap_md5 {
+                return Ok(osu_file_data);
+            }
+        }
+        None => {}
     }
 
     let osu_response = reqwest::get(&format!("https://old.ppy.sh/osu/{beatmap_id}"))

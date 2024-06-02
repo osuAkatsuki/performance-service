@@ -1872,6 +1872,7 @@ dependencies = [
  "futures",
  "lapin",
  "log",
+ "md5",
  "redis",
  "reqwest",
  "rkyv",

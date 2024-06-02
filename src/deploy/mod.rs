@@ -9,6 +9,7 @@ use tokio::sync::Mutex;
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct CalculateRequest {
     pub beatmap_id: i32,
+    pub beatmap_md5: String,
     pub mode: i32,
     pub mods: i32,
     pub max_combo: i32,
@@ -44,8 +45,12 @@ async fn calculate_special_pp(
             .unwrap()
             .clone()
     } else {
-        let beatmap_bytes =
-            usecases::beatmaps::fetch_beatmap_osu_file(request.beatmap_id, context.clone()).await?;
+        let beatmap_bytes = usecases::beatmaps::fetch_beatmap_osu_file(
+            request.beatmap_id,
+            &request.beatmap_md5,
+            context.clone(),
+        )
+        .await?;
         let beatmap = Beatmap::from_bytes(&beatmap_bytes).await?;
 
         recalc_mutex
@@ -91,8 +96,12 @@ async fn calculate_rosu_pp(
             .unwrap()
             .clone()
     } else {
-        let beatmap_bytes =
-            usecases::beatmaps::fetch_beatmap_osu_file(request.beatmap_id, context.clone()).await?;
+        let beatmap_bytes = usecases::beatmaps::fetch_beatmap_osu_file(
+            request.beatmap_id,
+            &request.beatmap_md5,
+            context.clone(),
+        )
+        .await?;
         let beatmap = Beatmap::from_bytes(&beatmap_bytes).await?;
 
         recalc_mutex
@@ -139,6 +148,7 @@ async fn recalculate_score(
 ) -> anyhow::Result<()> {
     let request = CalculateRequest {
         beatmap_id: score.beatmap_id,
+        beatmap_md5: score.beatmap_md5,
         mode: score.play_mode,
         mods: score.mods,
         max_combo: score.max_combo,
@@ -427,12 +437,11 @@ async fn recalculate_user(
     .execute(ctx.database.get().await?.deref_mut())
     .await?;
 
-    let (country, user_privileges): (String, i32) = sqlx::query_as(
-        "SELECT country, privileges FROM users WHERE id = ?",
-    )
-    .bind(user_id)
-    .fetch_one(ctx.database.get().await?.deref_mut())
-    .await?;
+    let (country, user_privileges): (String, i32) =
+        sqlx::query_as("SELECT country, privileges FROM users WHERE id = ?")
+            .bind(user_id)
+            .fetch_one(ctx.database.get().await?.deref_mut())
+            .await?;
 
     let last_score_time: Option<i32> = sqlx::query_scalar(&format!(
         "SELECT max(time) FROM {} INNER JOIN beatmaps USING(beatmap_md5)
