@@ -1,7 +1,9 @@
-use crate::context::Context;
 use crate::usecases;
+use crate::{api::error::AppResult, context::Context};
 use akatsuki_pp_rs::{Beatmap, BeatmapExt, GameMode, PerformanceAttributes};
+use axum::response::IntoResponse;
 use axum::{extract::Extension, routing::post, Json, Router};
+use reqwest::StatusCode;
 use std::sync::Arc;
 
 pub fn router() -> Router {
@@ -15,7 +17,10 @@ pub struct CalculateRequest {
     pub mode: i32,
     pub mods: i32,
     pub max_combo: i32,
-    pub accuracy: f32,
+    pub accuracy: Option<f32>,
+    pub count_300: Option<i32>,
+    pub count_100: Option<i32>,
+    pub count_50: Option<i32>,
     pub miss_count: i32,
 }
 
@@ -45,12 +50,20 @@ async fn calculate_relax_pp(
     .await?;
     let beatmap = Beatmap::from_bytes(&beatmap_bytes).await?;
 
-    let result = akatsuki_pp_rs::osu_2019::OsuPP::new(&beatmap)
+    let mut calculate = akatsuki_pp_rs::osu_2019::OsuPP::new(&beatmap)
         .mods(request.mods as u32)
-        .combo(request.max_combo as usize)
-        .misses(request.miss_count as usize)
-        .accuracy(request.accuracy)
-        .calculate();
+        .combo(request.max_combo as usize);
+
+    if request.accuracy.is_some() {
+        calculate = calculate.accuracy(request.accuracy.unwrap());
+    } else {
+        calculate = calculate
+            .n300(request.count_300.unwrap() as usize)
+            .n100(request.count_100.unwrap() as usize)
+            .n50(request.count_50.unwrap() as usize);
+    }
+
+    let result = calculate.misses(request.miss_count as usize).calculate();
 
     let mut pp = round(result.pp as f32, 2);
     if pp.is_infinite() || pp.is_nan() {
@@ -85,7 +98,7 @@ async fn calculate_rosu_pp(
     .await?;
     let beatmap = Beatmap::from_bytes(&beatmap_bytes).await?;
 
-    let result = beatmap
+    let mut calculate = beatmap
         .pp()
         .mode(match request.mode {
             0 => GameMode::Osu,
@@ -95,10 +108,18 @@ async fn calculate_rosu_pp(
             _ => unreachable!(),
         })
         .mods(request.mods as u32)
-        .combo(request.max_combo as usize)
-        .accuracy(request.accuracy as f64)
-        .n_misses(request.miss_count as usize)
-        .calculate();
+        .combo(request.max_combo as usize);
+
+    if request.accuracy.is_some() {
+        calculate = calculate.accuracy(request.accuracy.unwrap() as f64);
+    } else {
+        calculate = calculate
+            .n300(request.count_300.unwrap() as usize)
+            .n100(request.count_100.unwrap() as usize)
+            .n50(request.count_50.unwrap() as usize);
+    }
+
+    let result = calculate.n_misses(request.miss_count as usize).calculate();
 
     let mut pp = round(result.pp() as f32, 2);
     if pp.is_infinite() || pp.is_nan() {
@@ -149,10 +170,23 @@ const RX: i32 = 1 << 7;
 async fn calculate_play(
     Extension(ctx): Extension<Arc<Context>>,
     Json(requests): Json<Vec<CalculateRequest>>,
-) -> Json<Vec<CalculateResponse>> {
+) -> AppResult<impl IntoResponse> {
     let mut results = Vec::new();
 
     for request in requests {
+        let have_hit_statistics = request.count_300.is_some()
+            && request.count_100.is_some()
+            && request.count_50.is_some();
+        let have_accuracy = request.accuracy.is_some();
+
+        if (!have_accuracy && !have_hit_statistics) || (have_accuracy && have_hit_statistics) {
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                "you must pass accuracy OR hit results",
+            )
+                .into_response());
+        }
+
         let raw_result = if request.mods & RX > 0 && request.mode == 0 {
             calculate_relax_pp(&request, ctx.clone()).await
         } else {
@@ -168,13 +202,7 @@ async fn calculate_play(
                     "Performance calculation failed for beatmap",
                 );
 
-                CalculateResponse {
-                    stars: 0.0,
-                    pp: 0.0,
-                    ar: 0.0,
-                    od: 0.0,
-                    max_combo: 0,
-                }
+                return Err(e.into());
             }
         };
 
@@ -187,5 +215,5 @@ async fn calculate_play(
         results.push(result);
     }
 
-    Json(results)
+    Ok(Json(results).into_response())
 }

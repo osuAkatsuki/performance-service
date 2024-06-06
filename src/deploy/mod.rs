@@ -13,7 +13,9 @@ pub struct CalculateRequest {
     pub mode: i32,
     pub mods: i32,
     pub max_combo: i32,
-    pub accuracy: f32,
+    pub count_300: i32,
+    pub count_100: i32,
+    pub count_50: i32,
     pub miss_count: i32,
 }
 
@@ -66,7 +68,9 @@ async fn calculate_special_pp(
         .mods(request.mods as u32)
         .combo(request.max_combo as usize)
         .misses(request.miss_count as usize)
-        .accuracy(request.accuracy)
+        .n300(request.count_300 as usize)
+        .n100(request.count_100 as usize)
+        .n50(request.count_50 as usize)
         .calculate();
 
     let mut pp = round(result.pp as f32, 2);
@@ -124,7 +128,9 @@ async fn calculate_rosu_pp(
         })
         .mods(request.mods as u32)
         .combo(request.max_combo as usize)
-        .accuracy(request.accuracy as f64)
+        .n300(request.count_300 as usize)
+        .n100(request.count_100 as usize)
+        .n50(request.count_50 as usize)
         .n_misses(request.miss_count as usize)
         .calculate();
 
@@ -152,7 +158,9 @@ async fn recalculate_score(
         mode: score.play_mode,
         mods: score.mods,
         max_combo: score.max_combo,
-        accuracy: score.accuracy,
+        count_300: score.count_300,
+        count_100: score.count_100,
+        count_50: score.count_50,
         miss_count: score.count_misses,
     };
 
