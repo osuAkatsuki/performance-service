@@ -58,7 +58,9 @@ async fn calculate_conceptual_pp(
         })
         .mods(score.mods as u32)
         .combo(score.max_combo as usize)
-        .accuracy(score.accuracy as f64)
+        .n300(score.count_300 as usize)
+        .n100(score.count_100 as usize)
+        .n50(score.count_50 as usize)
         .n_misses(score.count_misses as usize)
         .calculate();
 
@@ -90,7 +92,9 @@ async fn calculate_skill_rebalance_pp(
         })
         .mods(score.mods as u32)
         .combo(score.max_combo as usize)
-        .accuracy(score.accuracy as f64)
+        .n300(score.count_300 as usize)
+        .n100(score.count_100 as usize)
+        .n50(score.count_50 as usize)
         .n_misses(score.count_misses as usize)
         .calculate();
 
@@ -114,8 +118,10 @@ async fn calculate_cursordance_pp(
     let result = cursordance::osu_2019::OsuPP::new(&beatmap)
         .mods(score.mods as u32)
         .combo(score.max_combo as usize)
+        .n300(score.count_300 as usize)
+        .n100(score.count_100 as usize)
+        .n50(score.count_50 as usize)
         .misses(score.count_misses as usize)
-        .accuracy(score.accuracy)
         .calculate();
 
     let mut pp = round(result.pp as f32, 2);
@@ -138,8 +144,10 @@ async fn calculate_no_accuracy_pp(
     let result = no_accuracy::osu_2019::OsuPP::new(&beatmap)
         .mods(score.mods as u32)
         .combo(score.max_combo as usize)
+        .n300(score.count_300 as usize)
+        .n100(score.count_100 as usize)
+        .n50(score.count_50 as usize)
         .misses(score.count_misses as usize)
-        .accuracy(score.accuracy)
         .calculate();
 
     let mut pp = round(result.pp as f32, 2);
@@ -162,8 +170,10 @@ async fn calculate_simplfy_relax_pp(
     let result = simplify_relax::osu_2019::OsuPP::new(&beatmap)
         .mods(score.mods as u32)
         .combo(score.max_combo as usize)
+        .n300(score.count_300 as usize)
+        .n100(score.count_100 as usize)
+        .n50(score.count_50 as usize)
         .misses(score.count_misses as usize)
-        .accuracy(score.accuracy)
         .calculate();
 
     let mut pp = round(result.pp as f32, 2);
@@ -186,8 +196,10 @@ async fn calculate_improved_miss_penalty_pp(
     let result = improved_miss_penalty::osu_2019::OsuPP::new(&beatmap)
         .mods(score.mods as u32)
         .combo(score.max_combo as usize)
+        .n300(score.count_300 as usize)
+        .n100(score.count_100 as usize)
+        .n50(score.count_50 as usize)
         .misses(score.count_misses as usize)
-        .accuracy(score.accuracy)
         .calculate();
 
     let mut pp = round(result.pp as f32, 2);
@@ -210,8 +222,10 @@ async fn calculate_accuracy_fun_pp(
     let result = accuracy_fun::osu_2019::OsuPP::new(&beatmap)
         .mods(score.mods as u32)
         .combo(score.max_combo as usize)
+        .n300(score.count_300 as usize)
+        .n100(score.count_100 as usize)
+        .n50(score.count_50 as usize)
         .misses(score.count_misses as usize)
-        .accuracy(score.accuracy)
         .calculate();
 
     let mut pp = round(result.pp as f32, 2);
