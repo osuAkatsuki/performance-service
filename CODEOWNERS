@@ -1,6 +1,6 @@
 * @cmyui @tsunyoku
 
-[Infrastructure]
+# Infrastructure
 /.github/* @cmyui
 /tf/* @cmyui
 /chart/* @cmyui
