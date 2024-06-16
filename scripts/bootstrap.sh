@@ -12,8 +12,7 @@ if [ -z "$APP_COMPONENT" ]; then
 fi
 
 if [[ $PULL_SECRETS_FROM_VAULT -eq 1 ]]; then
-  # TODO: revert to $APP_ENV
-  akatsuki vault get performance-service production-k8s -o .env
+  akatsuki vault get performance-service $APP_ENV -o .env
   source .env
 fi
 
