@@ -54,6 +54,7 @@ async fn calculate_relax_pp(
         .mods(request.mods as u32)
         .combo(request.max_combo as usize);
 
+    calculate = calculate.misses(request.miss_count as usize);
     if request.accuracy.is_some() {
         calculate = calculate.accuracy(request.accuracy.unwrap());
     } else {
@@ -63,7 +64,7 @@ async fn calculate_relax_pp(
             .n50(request.count_50.unwrap() as usize);
     }
 
-    let result = calculate.misses(request.miss_count as usize).calculate();
+    let result = calculate.calculate();
 
     let mut pp = round(result.pp as f32, 2);
     if pp.is_infinite() || pp.is_nan() {
@@ -110,6 +111,7 @@ async fn calculate_rosu_pp(
         .mods(request.mods as u32)
         .combo(request.max_combo as usize);
 
+    calculate = calculate.n_misses(request.miss_count as usize);
     if request.accuracy.is_some() {
         calculate = calculate.accuracy(request.accuracy.unwrap() as f64);
     } else {
@@ -119,7 +121,7 @@ async fn calculate_rosu_pp(
             .n50(request.count_50.unwrap() as usize);
     }
 
-    let result = calculate.n_misses(request.miss_count as usize).calculate();
+    let result = calculate.calculate();
 
     let mut pp = round(result.pp() as f32, 2);
     if pp.is_infinite() || pp.is_nan() {
