@@ -29,9 +29,9 @@ pub async fn fetch_beatmap_osu_file(
         None => {}
     }
 
-    let osu_response = reqwest::get(&format!("https://old.ppy.sh/osu/{beatmap_id}"))
-        .await?
-        .error_for_status()?;
+    let base_url = &context.config.beatmaps_service_base_url;
+    let url = &format!("{base_url}/api/osu-api/v1/osu-files/{beatmap_id}");
+    let osu_response = reqwest::get(url).await?.error_for_status()?;
 
     let response_bytes = osu_response.bytes().await?.to_vec();
 

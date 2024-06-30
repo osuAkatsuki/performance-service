@@ -74,4 +74,7 @@ pub struct Config {
 
     #[clap(long, env)]
     pub aws_secret_access_key: String,
+
+    #[clap(long, env)]
+    pub beatmaps_service_base_url: String,
 }
