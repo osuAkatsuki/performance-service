@@ -1,9 +1,10 @@
-name: k8s-deploy
+name: production-deploy
 
 on:
   push:
     branches:
       - main
+      - fix-rework-login
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
