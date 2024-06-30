@@ -11,6 +11,12 @@ pub async fn fetch_beatmap_osu_file(
 ) -> anyhow::Result<Vec<u8>> {
     let beatmap_path = &format!("beatmaps/{beatmap_id}.osu");
 
+    // TODO: rethink this caching by:
+    // 1. moving this .osu file update logic to beatmaps-service
+    // 2. marking a "last updated" date on files in s3
+    // 3. checking if the file in s3 is older than the last updated date
+    // 4. if it is, updating both the .osu file as well as the beatmaps in db
+    // 5. ensuring all other updates in the ecosystem are updating both the .osu file and the beatmaps in db
     let existing_file = match context.bucket.get_object(beatmap_path).await {
         Ok(existing_file) => Ok(Some(existing_file)),
         Err(S3Error::Http(status_code, _)) if status_code == 404 => Ok(None),
