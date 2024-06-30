@@ -55,12 +55,15 @@ async fn get_rework_user(
 
     let mut reworks: Vec<Rework> = Vec::new();
     for rework_id in rework_ids {
-        let rework: Rework = sqlx::query_as("SELECT * FROM reworks WHERE rework_id = ?")
+        let rework: Option<Rework> = sqlx::query_as("SELECT * FROM reworks WHERE rework_id = ?")
             .bind(rework_id)
-            .fetch_one(ctx.database.get().await?.deref_mut())
+            .fetch_optional(ctx.database.get().await?.deref_mut())
             .await?;
-
-        reworks.push(rework);
+        if let Some(rework) = rework {
+            reworks.push(rework);
+        } else {
+            continue;
+        }
     }
 
     Ok(Json(Some(ReworkUser {
