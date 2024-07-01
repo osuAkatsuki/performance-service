@@ -47,12 +47,8 @@ async fn calculate_special_pp(
             .unwrap()
             .clone()
     } else {
-        let beatmap_bytes = usecases::beatmaps::fetch_beatmap_osu_file(
-            request.beatmap_id,
-            &request.beatmap_md5,
-            context.clone(),
-        )
-        .await?;
+        let beatmap_bytes =
+            usecases::beatmaps::fetch_beatmap_osu_file(request.beatmap_id, context.clone()).await?;
         let beatmap = Beatmap::from_bytes(&beatmap_bytes).await?;
 
         recalc_mutex
@@ -100,12 +96,8 @@ async fn calculate_rosu_pp(
             .unwrap()
             .clone()
     } else {
-        let beatmap_bytes = usecases::beatmaps::fetch_beatmap_osu_file(
-            request.beatmap_id,
-            &request.beatmap_md5,
-            context.clone(),
-        )
-        .await?;
+        let beatmap_bytes =
+            usecases::beatmaps::fetch_beatmap_osu_file(request.beatmap_id, context.clone()).await?;
         let beatmap = Beatmap::from_bytes(&beatmap_bytes).await?;
 
         recalc_mutex

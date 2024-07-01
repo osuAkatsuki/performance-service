@@ -42,12 +42,8 @@ async fn calculate_relax_pp(
     request: &CalculateRequest,
     context: Arc<Context>,
 ) -> anyhow::Result<CalculateResponse> {
-    let beatmap_bytes = usecases::beatmaps::fetch_beatmap_osu_file(
-        request.beatmap_id,
-        &request.beatmap_md5,
-        context,
-    )
-    .await?;
+    let beatmap_bytes =
+        usecases::beatmaps::fetch_beatmap_osu_file(request.beatmap_id, context).await?;
     let beatmap = Beatmap::from_bytes(&beatmap_bytes).await?;
 
     let mut calculate = akatsuki_pp_rs::osu_2019::OsuPP::new(&beatmap)
@@ -91,12 +87,8 @@ async fn calculate_rosu_pp(
     request: &CalculateRequest,
     context: Arc<Context>,
 ) -> anyhow::Result<CalculateResponse> {
-    let beatmap_bytes = usecases::beatmaps::fetch_beatmap_osu_file(
-        request.beatmap_id,
-        &request.beatmap_md5,
-        context,
-    )
-    .await?;
+    let beatmap_bytes =
+        usecases::beatmaps::fetch_beatmap_osu_file(request.beatmap_id, context).await?;
     let beatmap = Beatmap::from_bytes(&beatmap_bytes).await?;
 
     let mut calculate = beatmap
