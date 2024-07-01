@@ -54,7 +54,7 @@ apps:
           cpu: 300m
           memory: 250Mi
         requests:
-          cpu: 150m
+          cpu: 75m
           memory: 100Mi
       imagePullSecrets:
         - name: osuakatsuki-registry-secret
