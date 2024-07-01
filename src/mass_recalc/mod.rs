@@ -1,9 +1,10 @@
+use std::io::Write;
 use std::sync::Arc;
 use std::time::SystemTime;
-use std::{io::Write, ops::DerefMut};
 
 use crate::{
     context::Context,
+    errors::{Error, ErrorCode},
     models::{queue::QueueRequest, rework::Rework},
     usecases,
 };
@@ -11,12 +12,17 @@ use crate::{
 use lapin::{options::BasicPublishOptions, BasicProperties};
 use redis::AsyncCommands;
 
-async fn queue_user(user_id: i32, rework: &Rework, context: &Context) -> anyhow::Result<()> {
+async fn queue_user(user_id: i32, rework: &Rework, context: &Context) -> Result<(), Error> {
     let scores_table = match rework.rx {
         0 => "scores",
         1 => "scores_relax",
         2 => "scores_ap",
-        _ => unreachable!(),
+        _ => {
+            return Err(Error {
+                error_code: ErrorCode::BadRequest,
+                user_feedback: "Invalid mode",
+            });
+        }
     };
 
     let last_score_time: Option<i32> = sqlx::query_scalar(&format!(
@@ -27,13 +33,21 @@ async fn queue_user(user_id: i32, rework: &Rework, context: &Context) -> anyhow:
     ))
     .bind(user_id)
     .bind(rework.mode)
-    .fetch_optional(context.database.get().await?.deref_mut())
-    .await?;
+    .fetch_optional(&context.database)
+    .await
+    .map_err(|_| Error {
+        error_code: ErrorCode::InternalServerError,
+        user_feedback: "Failed to fetch last score time",
+    })?;
 
     let inactive_days = match last_score_time {
         Some(time) => {
             ((SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)?
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .map_err(|_| Error {
+                    error_code: ErrorCode::InternalServerError,
+                    user_feedback: "Failed to get current time",
+                })?
                 .as_secs() as i32)
                 - time)
                 / 60
@@ -53,8 +67,12 @@ async fn queue_user(user_id: i32, rework: &Rework, context: &Context) -> anyhow:
     .bind(user_id)
     .bind(rework.rework_id)
     .bind(rework.updated_at)
-    .fetch_optional(context.database.get().await?.deref_mut())
-    .await?;
+    .fetch_optional(&context.database)
+    .await
+    .map_err(|_| Error {
+        error_code: ErrorCode::InternalServerError,
+        user_feedback: "Failed to check if user is in queue",
+    })?;
 
     if in_queue.is_some() {
         return Ok(());
@@ -63,8 +81,12 @@ async fn queue_user(user_id: i32, rework: &Rework, context: &Context) -> anyhow:
     sqlx::query(r#"REPLACE INTO rework_queue (user_id, rework_id) VALUES (?, ?)"#)
         .bind(user_id)
         .bind(rework.rework_id)
-        .execute(context.database.get().await?.deref_mut())
-        .await?;
+        .execute(&context.database)
+        .await
+        .map_err(|_| Error {
+            error_code: ErrorCode::InternalServerError,
+            user_feedback: "Failed to queue user",
+        })?;
 
     context
         .amqp_channel
@@ -75,10 +97,18 @@ async fn queue_user(user_id: i32, rework: &Rework, context: &Context) -> anyhow:
             &rkyv::to_bytes::<_, 256>(&QueueRequest {
                 user_id,
                 rework_id: rework.rework_id,
+            })
+            .map_err(|_| Error {
+                error_code: ErrorCode::InternalServerError,
+                user_feedback: "Failed to serialize queue request",
             })?,
             BasicProperties::default(),
         )
-        .await?;
+        .await
+        .map_err(|_| Error {
+            error_code: ErrorCode::InternalServerError,
+            user_feedback: "Failed to publish to queue",
+        })?;
 
     Ok(())
 }
@@ -99,23 +129,27 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
         "Mass recalculating on rework",
     );
 
-    let rework = usecases::reworks::fetch_one(rework_id, Arc::from(context.clone()))
-        .await?
-        .expect("failed to find rework");
+    let rework = match usecases::reworks::fetch_one(rework_id, Arc::from(context.clone())).await {
+        Ok(rework) => rework,
+        Err(e) => {
+            log::error!("Failed to fetch rework: {:?}", e);
+            return Ok(());
+        }
+    };
 
     sqlx::query("DELETE FROM rework_scores WHERE rework_id = ?")
         .bind(rework_id)
-        .execute(context.database.get().await?.deref_mut())
+        .execute(&context.database)
         .await?;
 
     sqlx::query("DELETE FROM rework_stats WHERE rework_id = ?")
         .bind(rework_id)
-        .execute(context.database.get().await?.deref_mut())
+        .execute(&context.database)
         .await?;
 
     sqlx::query("DELETE FROM rework_queue WHERE rework_id = ?")
         .bind(rework_id)
-        .execute(context.database.get().await?.deref_mut())
+        .execute(&context.database)
         .await?;
 
     let mut redis_connection = context.redis.get_async_connection().await?;
@@ -132,7 +166,7 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
         ORDER BY pp DESC",
     )
     .bind(rework.mode + (rework.rx * 4))
-    .fetch_all(context.database.get().await?.deref_mut())
+    .fetch_all(&context.database)
     .await?;
 
     for (user_id,) in user_ids {
@@ -142,10 +176,9 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
                 "Queued user",
             ),
             Err(err) => {
-                let err_str = err.to_string();
                 log::info!(
                     user_id = user_id,
-                    err = err_str;
+                    user_feedback = err.user_feedback;
                     "Failed to queue user"
                 )
             }

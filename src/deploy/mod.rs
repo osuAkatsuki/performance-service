@@ -1,7 +1,8 @@
+use crate::errors::{Error, ErrorCode};
 use crate::{context::Context, models::score::RippleScore, usecases};
 use akatsuki_pp_rs::{Beatmap, BeatmapExt, GameMode};
 use redis::AsyncCommands;
-use std::{collections::HashMap, ops::DerefMut, sync::Arc, time::SystemTime};
+use std::{collections::HashMap, sync::Arc, time::SystemTime};
 
 use std::io::Write;
 use tokio::sync::Mutex;
@@ -37,7 +38,7 @@ async fn calculate_special_pp(
     request: &CalculateRequest,
     context: Arc<Context>,
     recalc_ctx: &Arc<Mutex<RecalculateContext>>,
-) -> anyhow::Result<CalculateResponse> {
+) -> Result<CalculateResponse, Error> {
     let mut recalc_mutex = recalc_ctx.lock().await;
 
     let beatmap = if recalc_mutex.beatmaps.contains_key(&request.beatmap_id) {
@@ -47,13 +48,14 @@ async fn calculate_special_pp(
             .unwrap()
             .clone()
     } else {
-        let beatmap_bytes = usecases::beatmaps::fetch_beatmap_osu_file(
-            request.beatmap_id,
-            &request.beatmap_md5,
-            context.clone(),
-        )
-        .await?;
-        let beatmap = Beatmap::from_bytes(&beatmap_bytes).await?;
+        let beatmap_bytes =
+            usecases::beatmaps::fetch_beatmap_osu_file(request.beatmap_id, context.clone()).await?;
+        let beatmap = Beatmap::from_bytes(&beatmap_bytes)
+            .await
+            .map_err(|_| Error {
+                error_code: ErrorCode::InternalServerError,
+                user_feedback: "Failed to parse beatmap",
+            })?;
 
         recalc_mutex
             .beatmaps
@@ -90,7 +92,7 @@ async fn calculate_rosu_pp(
     request: &CalculateRequest,
     context: Arc<Context>,
     recalc_ctx: &Arc<Mutex<RecalculateContext>>,
-) -> anyhow::Result<CalculateResponse> {
+) -> Result<CalculateResponse, Error> {
     let mut recalc_mutex = recalc_ctx.lock().await;
 
     let beatmap = if recalc_mutex.beatmaps.contains_key(&request.beatmap_id) {
@@ -100,13 +102,19 @@ async fn calculate_rosu_pp(
             .unwrap()
             .clone()
     } else {
-        let beatmap_bytes = usecases::beatmaps::fetch_beatmap_osu_file(
-            request.beatmap_id,
-            &request.beatmap_md5,
-            context.clone(),
-        )
-        .await?;
-        let beatmap = Beatmap::from_bytes(&beatmap_bytes).await?;
+        let beatmap_bytes =
+            usecases::beatmaps::fetch_beatmap_osu_file(request.beatmap_id, context.clone())
+                .await
+                .map_err(|_| Error {
+                    error_code: ErrorCode::DependencyFailed,
+                    user_feedback: "Failed to fetch beatmap osu file",
+                })?;
+        let beatmap = Beatmap::from_bytes(&beatmap_bytes)
+            .await
+            .map_err(|_| Error {
+                error_code: ErrorCode::InternalServerError,
+                user_feedback: "Failed to parse beatmap",
+            })?;
 
         recalc_mutex
             .beatmaps
@@ -124,7 +132,12 @@ async fn calculate_rosu_pp(
             1 => GameMode::Taiko,
             2 => GameMode::Catch,
             3 => GameMode::Mania,
-            _ => unreachable!(),
+            _ => {
+                return Err(Error {
+                    error_code: ErrorCode::BadRequest,
+                    user_feedback: "Invalid mode",
+                })
+            }
         })
         .mods(request.mods as u32)
         .combo(request.max_combo as usize)
@@ -151,7 +164,7 @@ async fn recalculate_score(
     score: RippleScore,
     ctx: Arc<Context>,
     recalc_ctx: Arc<Mutex<RecalculateContext>>,
-) -> anyhow::Result<()> {
+) -> Result<(), Error> {
     let request = CalculateRequest {
         beatmap_id: score.beatmap_id,
         beatmap_md5: score.beatmap_md5,
@@ -188,8 +201,12 @@ async fn recalculate_score(
     sqlx::query(&format!("UPDATE {} SET pp = ? WHERE id = ?", scores_table))
         .bind(response.pp)
         .bind(score.id)
-        .execute(ctx.database.get().await?.deref_mut())
-        .await?;
+        .execute(&ctx.database)
+        .await
+        .map_err(|_| Error {
+            error_code: ErrorCode::InternalServerError,
+            user_feedback: "Failed to update score",
+        })?;
 
     log::info!(
         score_id = score.id,
@@ -240,7 +257,7 @@ async fn recalculate_mode_scores(
         )
     )
     .bind(mode)
-    .fetch_all(ctx.database.get().await?.deref_mut())
+    .fetch_all(&ctx.database)
     .await?;
 
     for score_chunk in scores.chunks(100).map(|c| c.to_vec()) {
@@ -293,7 +310,7 @@ async fn recalculate_status(
     .bind(user_id)
     .bind(mode)
     .bind(beatmap_md5)
-    .fetch_all(ctx.database.get().await?.deref_mut())
+    .fetch_all(&ctx.database)
     .await?;
 
     let best_id = scores[0].0;
@@ -304,7 +321,7 @@ async fn recalculate_status(
         scores_table
     ))
     .bind(best_id)
-    .execute(ctx.database.get().await?.deref_mut())
+    .execute(&ctx.database)
     .await?;
 
     for non_best in non_bests {
@@ -313,7 +330,7 @@ async fn recalculate_status(
             scores_table
         ))
         .bind(non_best.0)
-        .execute(ctx.database.get().await?.deref_mut())
+        .execute(&ctx.database)
         .await?;
     }
 
@@ -325,12 +342,17 @@ async fn recalculate_statuses(
     mode: i32,
     rx: i32,
     ctx: Arc<Context>,
-) -> anyhow::Result<()> {
+) -> Result<(), Error> {
     let scores_table = match rx {
         0 => "scores",
         1 => "scores_relax",
         2 => "scores_ap",
-        _ => unreachable!(),
+        _ => {
+            return Err(Error {
+                error_code: ErrorCode::BadRequest,
+                user_feedback: "Invalid relax value",
+            })
+        }
     };
 
     let beatmap_md5s: Vec<(String,)> = sqlx::query_as(
@@ -341,8 +363,14 @@ async fn recalculate_statuses(
     )
         .bind(user_id)
         .bind(mode)
-        .fetch_all(ctx.database.get().await?.deref_mut())
-        .await?;
+        .fetch_all(&ctx.database)
+        .await
+        .map_err(
+        |_| Error {
+            error_code: ErrorCode::InternalServerError,
+            user_feedback: "Failed to fetch beatmap md5s",
+        },
+        )?;
 
     for beatmap_chunk in beatmap_md5s.chunks(100).map(|c| c.to_vec()) {
         let mut futures = Vec::with_capacity(beatmap_chunk.len());
@@ -359,7 +387,12 @@ async fn recalculate_statuses(
             futures.push(future);
         }
 
-        futures::future::try_join_all(futures).await?;
+        futures::future::try_join_all(futures)
+            .await
+            .map_err(|_| Error {
+                error_code: ErrorCode::InternalServerError,
+                user_feedback: "Failed to recalculate statuses",
+            })?;
     }
 
     Ok(())
@@ -370,14 +403,24 @@ async fn recalculate_user(
     mode: i32,
     rx: i32,
     ctx: Arc<Context>,
-) -> anyhow::Result<()> {
-    recalculate_statuses(user_id, mode, rx, ctx.clone()).await?;
+) -> Result<(), Error> {
+    recalculate_statuses(user_id, mode, rx, ctx.clone())
+        .await
+        .map_err(|_| Error {
+            error_code: ErrorCode::InternalServerError,
+            user_feedback: "Failed to recalculate statuses",
+        })?;
 
     let scores_table = match rx {
         0 => "scores",
         1 => "scores_relax",
         2 => "scores_ap",
-        _ => unreachable!(),
+        _ => {
+            return Err(Error {
+                error_code: ErrorCode::BadRequest,
+                user_feedback: "Invalid relax value",
+            })
+        }
     };
 
     let scores: Vec<RippleScore> = sqlx::query_as(
@@ -401,8 +444,14 @@ async fn recalculate_user(
     )
     .bind(user_id)
     .bind(mode)
-    .fetch_all(ctx.database.get().await?.deref_mut())
-    .await?;
+    .fetch_all(&ctx.database)
+    .await
+    .map_err(
+        |_| Error {
+            error_code: ErrorCode::InternalServerError,
+            user_feedback: "Failed to fetch scores",
+        },
+    )?;
 
     let score_count: i32 = sqlx::query_scalar(
         &format!(
@@ -412,8 +461,14 @@ async fn recalculate_user(
     )
         .bind(user_id)
         .bind(mode)
-        .fetch_one(ctx.database.get().await?.deref_mut())
-        .await?;
+        .fetch_one(&ctx.database)
+        .await
+        .map_err(
+        |_| Error {
+            error_code: ErrorCode::InternalServerError,
+            user_feedback: "Failed to fetch score count",
+        },
+        )?;
 
     let new_pp = calculate_new_pp(&scores, score_count);
 
@@ -423,14 +478,22 @@ async fn recalculate_user(
     .bind(new_pp)
     .bind(user_id)
     .bind(mode + (4 * rx))
-    .execute(ctx.database.get().await?.deref_mut())
-    .await?;
+    .execute(&ctx.database)
+    .await
+    .map_err(|_| Error {
+        error_code: ErrorCode::InternalServerError,
+        user_feedback: "Failed to update user stats",
+    })?;
 
     let (country, user_privileges): (String, i32) =
         sqlx::query_as("SELECT country, privileges FROM users WHERE id = ?")
             .bind(user_id)
-            .fetch_one(ctx.database.get().await?.deref_mut())
-            .await?;
+            .fetch_one(&ctx.database)
+            .await
+            .map_err(|_| Error {
+                error_code: ErrorCode::InternalServerError,
+                user_feedback: "Failed to fetch user info",
+            })?;
 
     let last_score_time: Option<i32> = sqlx::query_scalar(&format!(
         "SELECT max(time) FROM {} INNER JOIN beatmaps USING(beatmap_md5)
@@ -440,13 +503,21 @@ async fn recalculate_user(
     ))
     .bind(user_id)
     .bind(mode)
-    .fetch_optional(ctx.database.get().await?.deref_mut())
-    .await?;
+    .fetch_optional(&ctx.database)
+    .await
+    .map_err(|_| Error {
+        error_code: ErrorCode::InternalServerError,
+        user_feedback: "Failed to fetch last score time",
+    })?;
 
     let inactive_days = match last_score_time {
         Some(time) => {
             ((SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)?
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .map_err(|_| Error {
+                    error_code: ErrorCode::InternalServerError,
+                    user_feedback: "Failed to calculate time",
+                })?
                 .as_secs() as i32)
                 - time)
                 / 60
@@ -456,7 +527,10 @@ async fn recalculate_user(
         None => 60,
     };
 
-    let mut redis_connection = ctx.redis.get_async_connection().await?;
+    let mut redis_connection = ctx.redis.get_async_connection().await.map_err(|_| Error {
+        error_code: ErrorCode::InternalServerError,
+        user_feedback: "Failed to get redis connection",
+    })?;
 
     // unrestricted, and set a score in the past 2 months
     if user_privileges & 1 > 0 && inactive_days < 60 {
@@ -464,7 +538,12 @@ async fn recalculate_user(
             0 => "leaderboard".to_string(),
             1 => "relaxboard".to_string(),
             2 => "autoboard".to_string(),
-            _ => unreachable!(),
+            _ => {
+                return Err(Error {
+                    error_code: ErrorCode::BadRequest,
+                    user_feedback: "Invalid relax value",
+                })
+            }
         };
 
         let stats_prefix = match mode {
@@ -472,7 +551,12 @@ async fn recalculate_user(
             1 => "taiko",
             2 => "ctb",
             3 => "mania",
-            _ => unreachable!(),
+            _ => {
+                return Err(Error {
+                    error_code: ErrorCode::BadRequest,
+                    user_feedback: "Invalid mode value",
+                })
+            }
         };
 
         redis_connection
@@ -481,7 +565,11 @@ async fn recalculate_user(
                 user_id.to_string(),
                 new_pp,
             )
-            .await?;
+            .await
+            .map_err(|_| Error {
+                error_code: ErrorCode::InternalServerError,
+                user_feedback: "Failed to update redis",
+            })?;
 
         redis_connection
             .zadd(
@@ -494,12 +582,20 @@ async fn recalculate_user(
                 user_id.to_string(),
                 new_pp,
             )
-            .await?;
+            .await
+            .map_err(|_| Error {
+                error_code: ErrorCode::InternalServerError,
+                user_feedback: "Failed to update redis",
+            })?;
     }
 
     redis_connection
         .publish("peppy:update_cached_stats", user_id)
-        .await?;
+        .await
+        .map_err(|_| Error {
+            error_code: ErrorCode::InternalServerError,
+            user_feedback: "Failed to publish update",
+        })?;
 
     log::info!(
         user_id = user_id,
@@ -514,7 +610,7 @@ async fn recalculate_user(
 
 async fn recalculate_mode_users(mode: i32, rx: i32, ctx: Arc<Context>) -> anyhow::Result<()> {
     let user_ids: Vec<(i32,)> = sqlx::query_as(&format!("SELECT id FROM users"))
-        .fetch_all(ctx.database.get().await?.deref_mut())
+        .fetch_all(&ctx.database)
         .await?;
 
     for user_id_chunk in user_ids.chunks(100).map(|c| c.to_vec()) {

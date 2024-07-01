@@ -1,4 +1,4 @@
-use std::{ops::DerefMut, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use lapin::{
     options::{BasicAckOptions, BasicConsumeOptions, QueueDeclareOptions},
@@ -10,6 +10,7 @@ use tokio_stream::StreamExt;
 
 use crate::{
     context::Context,
+    errors::{Error, ErrorCode},
     models::{
         queue::QueueRequest,
         rework::Rework,
@@ -38,14 +39,15 @@ fn round(x: f32, decimals: u32) -> f32 {
     (x * y).round() / y
 }
 
-async fn calculate_conceptual_pp(
-    score: &RippleScore,
-    context: Arc<Context>,
-) -> anyhow::Result<f32> {
+async fn calculate_conceptual_pp(score: &RippleScore, context: Arc<Context>) -> Result<f32, Error> {
     let beatmap_bytes =
-        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, &score.beatmap_md5, context)
-            .await?;
-    let beatmap = ConceptualBeatmap::from_bytes(&beatmap_bytes).await?;
+        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, context).await?;
+    let beatmap = ConceptualBeatmap::from_bytes(&beatmap_bytes)
+        .await
+        .map_err(|_| Error {
+            error_code: ErrorCode::InternalServerError,
+            user_feedback: "Failed to parse beatmap",
+        })?;
 
     let result = beatmap
         .pp()
@@ -75,11 +77,15 @@ async fn calculate_conceptual_pp(
 async fn calculate_skill_rebalance_pp(
     score: &RippleScore,
     context: Arc<Context>,
-) -> anyhow::Result<f32> {
+) -> Result<f32, Error> {
     let beatmap_bytes =
-        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, &score.beatmap_md5, context)
-            .await?;
-    let beatmap = SkillRebalanceBeatmap::from_bytes(&beatmap_bytes).await?;
+        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, context).await?;
+    let beatmap = SkillRebalanceBeatmap::from_bytes(&beatmap_bytes)
+        .await
+        .map_err(|_| Error {
+            error_code: ErrorCode::InternalServerError,
+            user_feedback: "Failed to parse beatmap",
+        })?;
 
     let result = beatmap
         .pp()
@@ -109,11 +115,15 @@ async fn calculate_skill_rebalance_pp(
 async fn calculate_cursordance_pp(
     score: &RippleScore,
     context: Arc<Context>,
-) -> anyhow::Result<f32> {
+) -> Result<f32, Error> {
     let beatmap_bytes =
-        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, &score.beatmap_md5, context)
-            .await?;
-    let beatmap = CdBeatmap::from_bytes(&beatmap_bytes).await?;
+        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, context).await?;
+    let beatmap = CdBeatmap::from_bytes(&beatmap_bytes)
+        .await
+        .map_err(|_| Error {
+            error_code: ErrorCode::InternalServerError,
+            user_feedback: "Failed to parse beatmap",
+        })?;
 
     let result = cursordance::osu_2019::OsuPP::new(&beatmap)
         .mods(score.mods as u32)
@@ -135,11 +145,15 @@ async fn calculate_cursordance_pp(
 async fn calculate_no_accuracy_pp(
     score: &RippleScore,
     context: Arc<Context>,
-) -> anyhow::Result<f32> {
+) -> Result<f32, Error> {
     let beatmap_bytes =
-        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, &score.beatmap_md5, context)
-            .await?;
-    let beatmap = NoAccuracyBeatmap::from_bytes(&beatmap_bytes).await?;
+        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, context).await?;
+    let beatmap = NoAccuracyBeatmap::from_bytes(&beatmap_bytes)
+        .await
+        .map_err(|_| Error {
+            error_code: ErrorCode::InternalServerError,
+            user_feedback: "Failed to parse beatmap",
+        })?;
 
     let result = no_accuracy::osu_2019::OsuPP::new(&beatmap)
         .mods(score.mods as u32)
@@ -161,11 +175,15 @@ async fn calculate_no_accuracy_pp(
 async fn calculate_simplfy_relax_pp(
     score: &RippleScore,
     context: Arc<Context>,
-) -> anyhow::Result<f32> {
+) -> Result<f32, Error> {
     let beatmap_bytes =
-        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, &score.beatmap_md5, context)
-            .await?;
-    let beatmap = SimplifyRelaxBeatmap::from_bytes(&beatmap_bytes).await?;
+        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, context).await?;
+    let beatmap = SimplifyRelaxBeatmap::from_bytes(&beatmap_bytes)
+        .await
+        .map_err(|_| Error {
+            error_code: ErrorCode::InternalServerError,
+            user_feedback: "Failed to parse beatmap",
+        })?;
 
     let result = simplify_relax::osu_2019::OsuPP::new(&beatmap)
         .mods(score.mods as u32)
@@ -187,11 +205,15 @@ async fn calculate_simplfy_relax_pp(
 async fn calculate_improved_miss_penalty_pp(
     score: &RippleScore,
     context: Arc<Context>,
-) -> anyhow::Result<f32> {
+) -> Result<f32, Error> {
     let beatmap_bytes =
-        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, &score.beatmap_md5, context)
-            .await?;
-    let beatmap = ImprovedMissPenaltyBeatmap::from_bytes(&beatmap_bytes).await?;
+        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, context).await?;
+    let beatmap = ImprovedMissPenaltyBeatmap::from_bytes(&beatmap_bytes)
+        .await
+        .map_err(|_| Error {
+            error_code: ErrorCode::InternalServerError,
+            user_feedback: "Failed to parse beatmap",
+        })?;
 
     let result = improved_miss_penalty::osu_2019::OsuPP::new(&beatmap)
         .mods(score.mods as u32)
@@ -213,11 +235,15 @@ async fn calculate_improved_miss_penalty_pp(
 async fn calculate_accuracy_fun_pp(
     score: &RippleScore,
     context: Arc<Context>,
-) -> anyhow::Result<f32> {
+) -> Result<f32, Error> {
     let beatmap_bytes =
-        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, &score.beatmap_md5, context)
-            .await?;
-    let beatmap = AccuracyFunBeatmap::from_bytes(&beatmap_bytes).await?;
+        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, context).await?;
+    let beatmap = AccuracyFunBeatmap::from_bytes(&beatmap_bytes)
+        .await
+        .map_err(|_| Error {
+            error_code: ErrorCode::InternalServerError,
+            user_feedback: "Failed to parse beatmap",
+        })?;
 
     let result = accuracy_fun::osu_2019::OsuPP::new(&beatmap)
         .mods(score.mods as u32)
@@ -240,7 +266,7 @@ async fn process_scores(
     rework: &Rework,
     scores: Vec<RippleScore>,
     context: Arc<Context>,
-) -> anyhow::Result<Vec<ReworkScore>> {
+) -> Result<Vec<ReworkScore>, Error> {
     let mut rework_scores: Vec<ReworkScore> = Vec::new();
 
     for score in &scores {
@@ -253,7 +279,12 @@ async fn process_scores(
             18 => calculate_simplfy_relax_pp(score, context.clone()).await?,
             19 => calculate_improved_miss_penalty_pp(score, context.clone()).await?,
             20 => calculate_accuracy_fun_pp(score, context.clone()).await?,
-            _ => unreachable!(),
+            _ => {
+                return Err(Error {
+                    error_code: ErrorCode::BadRequest,
+                    user_feedback: "Invalid rework ID",
+                })
+            }
         };
 
         log::info!(
@@ -287,11 +318,7 @@ async fn handle_queue_request(
     delivery_tag: u64,
 ) -> anyhow::Result<()> {
     let rework = usecases::reworks::fetch_one(request.rework_id, context.clone()).await?;
-    if rework.is_none() {
-        anyhow::bail!("failed to find rework");
-    }
 
-    let rework = rework.unwrap();
     let scores_table = match rework.rx {
         0 => "scores",
         1 => "scores_relax",
@@ -320,7 +347,7 @@ async fn handle_queue_request(
     )
     .bind(request.user_id)
     .bind(rework.mode)
-    .fetch_all(context.database.get().await?.deref_mut())
+    .fetch_all(&context.database)
     .await?;
 
     let score_count: i32 = sqlx::query_scalar(
@@ -331,7 +358,7 @@ async fn handle_queue_request(
     )
         .bind(request.user_id)
         .bind(rework.mode)
-        .fetch_one(context.database.get().await?.deref_mut())
+        .fetch_one(&context.database)
         .await?;
 
     let rework_scores = process_scores(&rework, scores, context.clone()).await?;
@@ -360,7 +387,7 @@ async fn handle_queue_request(
         .bind(rework_score.num_misses)
         .bind(rework_score.old_pp)
         .bind(rework_score.new_pp)
-        .execute(context.database.get().await?.deref_mut())
+        .execute(&context.database)
         .await?;
     }
 
@@ -368,7 +395,7 @@ async fn handle_queue_request(
         sqlx::query_scalar(r#"SELECT pp FROM user_stats WHERE user_id = ? AND mode = ?"#)
             .bind(request.user_id)
             .bind(rework.mode + (rework.rx * 4))
-            .fetch_one(context.database.get().await?.deref_mut())
+            .fetch_one(&context.database)
             .await?;
 
     let rework_stats = ReworkStats {
@@ -385,7 +412,7 @@ async fn handle_queue_request(
     .bind(rework_stats.rework_id)
     .bind(rework_stats.old_pp)
     .bind(rework_stats.new_pp)
-    .execute(context.database.get().await?.deref_mut())
+    .execute(&context.database)
     .await?;
 
     let mut redis_connection = context.redis.get_async_connection().await?;
@@ -400,7 +427,7 @@ async fn handle_queue_request(
     sqlx::query("UPDATE rework_queue SET processed_at = CURRENT_TIMESTAMP() WHERE user_id = ? AND rework_id = ?")
         .bind(request.user_id)
         .bind(request.rework_id)
-        .execute(context.database.get().await?.deref_mut())
+        .execute(&context.database)
         .await?;
 
     context

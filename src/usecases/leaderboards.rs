@@ -1,4 +1,9 @@
-use crate::{context::Context, models::leaderboard::Leaderboard, repositories};
+use crate::{
+    context::Context,
+    errors::{Error, ErrorCode},
+    models::leaderboard::Leaderboard,
+    repositories::leaderboards::LeaderboardsRepository,
+};
 use std::sync::Arc;
 
 pub async fn fetch_one(
@@ -6,9 +11,21 @@ pub async fn fetch_one(
     offset: i32,
     limit: i32,
     context: Arc<Context>,
-) -> anyhow::Result<Option<Leaderboard>> {
-    let repo = repositories::leaderboards::LeaderboardsRepository::new(context);
-    let rework = repo.fetch_one(rework_id, offset, limit).await?;
+) -> Result<Leaderboard, Error> {
+    let repo = LeaderboardsRepository::new(context);
+    let rework = repo
+        .fetch_one(rework_id, offset, limit)
+        .await
+        .map_err(|_| Error {
+            error_code: ErrorCode::InternalServerError,
+            user_feedback: "Failed to fetch leaderboard",
+        })?;
 
-    Ok(rework)
+    match rework {
+        Some(rework) => Ok(rework),
+        None => Err(Error {
+            error_code: ErrorCode::NotFound,
+            user_feedback: "Leaderboard not found",
+        }),
+    }
 }

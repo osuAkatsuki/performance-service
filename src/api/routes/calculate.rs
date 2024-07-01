@@ -1,5 +1,10 @@
+use crate::api::error::ApiError;
 use crate::usecases;
-use crate::{api::error::AppResult, context::Context};
+use crate::{
+    api::error::AppResult,
+    context::Context,
+    errors::{Error, ErrorCode},
+};
 use akatsuki_pp_rs::{Beatmap, BeatmapExt, GameMode, PerformanceAttributes};
 use axum::response::IntoResponse;
 use axum::{extract::Extension, routing::post, Json, Router};
@@ -41,14 +46,15 @@ fn round(x: f32, decimals: u32) -> f32 {
 async fn calculate_relax_pp(
     request: &CalculateRequest,
     context: Arc<Context>,
-) -> anyhow::Result<CalculateResponse> {
-    let beatmap_bytes = usecases::beatmaps::fetch_beatmap_osu_file(
-        request.beatmap_id,
-        &request.beatmap_md5,
-        context,
-    )
-    .await?;
-    let beatmap = Beatmap::from_bytes(&beatmap_bytes).await?;
+) -> Result<CalculateResponse, Error> {
+    let beatmap_bytes =
+        usecases::beatmaps::fetch_beatmap_osu_file(request.beatmap_id, context).await?;
+    let beatmap = Beatmap::from_bytes(&beatmap_bytes)
+        .await
+        .map_err(|_| Error {
+            error_code: ErrorCode::InternalServerError,
+            user_feedback: "Failed to parse beatmap",
+        })?;
 
     let mut calculate = akatsuki_pp_rs::osu_2019::OsuPP::new(&beatmap)
         .mods(request.mods as u32)
@@ -90,14 +96,16 @@ async fn calculate_relax_pp(
 async fn calculate_rosu_pp(
     request: &CalculateRequest,
     context: Arc<Context>,
-) -> anyhow::Result<CalculateResponse> {
-    let beatmap_bytes = usecases::beatmaps::fetch_beatmap_osu_file(
-        request.beatmap_id,
-        &request.beatmap_md5,
-        context,
-    )
-    .await?;
-    let beatmap = Beatmap::from_bytes(&beatmap_bytes).await?;
+) -> Result<CalculateResponse, Error> {
+    let beatmap_bytes =
+        usecases::beatmaps::fetch_beatmap_osu_file(request.beatmap_id, context).await?;
+
+    let beatmap = Beatmap::from_bytes(&beatmap_bytes)
+        .await
+        .map_err(|_| Error {
+            error_code: ErrorCode::InternalServerError,
+            user_feedback: "Failed to parse beatmap",
+        })?;
 
     let mut calculate = beatmap
         .pp()
@@ -106,7 +114,12 @@ async fn calculate_rosu_pp(
             1 => GameMode::Taiko,
             2 => GameMode::Catch,
             3 => GameMode::Mania,
-            _ => unreachable!(),
+            _ => {
+                return Err(Error {
+                    error_code: ErrorCode::BadRequest,
+                    user_feedback: "Invalid mode",
+                })
+            }
         })
         .mods(request.mods as u32)
         .combo(request.max_combo as usize);
@@ -200,11 +213,11 @@ async fn calculate_play(
             Err(e) => {
                 log::error!(
                     beatmap_id = request.beatmap_id,
-                    error = e.to_string();
+                    error = e.user_feedback;
                     "Performance calculation failed for beatmap",
                 );
 
-                return Err(e.into());
+                return Err(ApiError(e));
             }
         };
 

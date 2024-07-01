@@ -6,7 +6,12 @@ use axum::{
     Json, Router,
 };
 
-use crate::{api::error::AppResult, context::Context, models::rework::Rework, usecases};
+use crate::{
+    api::error::{ApiError, AppResult},
+    context::Context,
+    models::rework::Rework,
+    usecases,
+};
 
 pub fn router() -> Router {
     Router::new()
@@ -15,14 +20,18 @@ pub fn router() -> Router {
 }
 
 async fn get_reworks(Extension(ctx): Extension<Arc<Context>>) -> AppResult<Json<Vec<Rework>>> {
-    let reworks = usecases::reworks::fetch_all(ctx.clone()).await?;
+    let reworks = usecases::reworks::fetch_all(ctx.clone())
+        .await
+        .map_err(|e| ApiError(e))?;
     Ok(Json(reworks))
 }
 
 async fn get_rework(
     Extension(ctx): Extension<Arc<Context>>,
     Path(rework_id): Path<i32>,
-) -> AppResult<Json<Option<Rework>>> {
-    let rework = usecases::reworks::fetch_one(rework_id, ctx.clone()).await?;
+) -> AppResult<Json<Rework>> {
+    let rework = usecases::reworks::fetch_one(rework_id, ctx.clone())
+        .await
+        .map_err(|e| ApiError(e))?;
     Ok(Json(rework))
 }

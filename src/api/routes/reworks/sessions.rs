@@ -5,7 +5,7 @@ use axum::{
 };
 use std::sync::Arc;
 
-use crate::context::Context;
+use crate::{api::error::ApiError, context::Context};
 use crate::{api::error::AppResult, usecases};
 
 pub fn router() -> Router {
@@ -24,8 +24,9 @@ async fn create_session(
     Extension(ctx): Extension<Arc<Context>>,
     Json(request): Json<CreateSessionRequest>,
 ) -> AppResult<Json<usecases::sessions::CreateSessionResponse>> {
-    let response =
-        usecases::sessions::create(request.username, request.password_md5, ctx.clone()).await?;
+    let response = usecases::sessions::create(request.username, request.password_md5, ctx.clone())
+        .await
+        .map_err(|e| ApiError(e))?;
 
     Ok(Json(response))
 }
@@ -34,6 +35,9 @@ async fn delete_session(
     Extension(ctx): Extension<Arc<Context>>,
     Path(session): Path<String>,
 ) -> AppResult<()> {
-    let _ = usecases::sessions::delete(session, ctx.clone()).await?;
+    let _ = usecases::sessions::delete(session, ctx.clone())
+        .await
+        .map_err(|e| ApiError(e))?;
+
     Ok(())
 }

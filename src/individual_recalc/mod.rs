@@ -1,5 +1,5 @@
+use std::io::Write;
 use std::sync::Arc;
-use std::{io::Write, ops::DerefMut};
 
 use crate::{
     context::Context,
@@ -17,7 +17,7 @@ async fn queue_user(user_id: i32, rework: &Rework, context: &Context) -> anyhow:
     .bind(user_id)
     .bind(rework.rework_id)
     .bind(rework.updated_at)
-    .fetch_optional(context.database.get().await?.deref_mut())
+    .fetch_optional(&context.database)
     .await?;
 
     if in_queue.is_some() {
@@ -27,7 +27,7 @@ async fn queue_user(user_id: i32, rework: &Rework, context: &Context) -> anyhow:
     sqlx::query(r#"REPLACE INTO rework_queue (user_id, rework_id) VALUES (?, ?)"#)
         .bind(user_id)
         .bind(rework.rework_id)
-        .execute(context.database.get().await?.deref_mut())
+        .execute(&context.database)
         .await?;
 
     context
@@ -75,26 +75,30 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
         user_id
     );
 
-    let rework = usecases::reworks::fetch_one(rework_id, Arc::from(context.clone()))
-        .await?
-        .expect("failed to find rework");
+    let rework = match usecases::reworks::fetch_one(rework_id, Arc::from(context.clone())).await {
+        Ok(rework) => rework,
+        Err(e) => {
+            log::error!("Failed to fetch rework: {:?}", e);
+            return Ok(());
+        }
+    };
 
     sqlx::query("DELETE FROM rework_scores WHERE rework_id = ? AND user_id = ?")
         .bind(rework_id)
         .bind(user_id)
-        .execute(context.database.get().await?.deref_mut())
+        .execute(&context.database)
         .await?;
 
     sqlx::query("DELETE FROM rework_stats WHERE rework_id = ? AND user_id = ?")
         .bind(rework_id)
         .bind(user_id)
-        .execute(context.database.get().await?.deref_mut())
+        .execute(&context.database)
         .await?;
 
     sqlx::query("DELETE FROM rework_queue WHERE rework_id = ? AND user_id = ?")
         .bind(rework_id)
         .bind(user_id)
-        .execute(context.database.get().await?.deref_mut())
+        .execute(&context.database)
         .await?;
 
     let mut redis_connection = context.redis.get_async_connection().await?;

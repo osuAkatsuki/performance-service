@@ -2,6 +2,7 @@ pub mod api;
 pub mod config;
 pub mod context;
 pub mod deploy;
+pub mod errors;
 pub mod individual_recalc;
 pub mod mass_recalc;
 pub mod models;

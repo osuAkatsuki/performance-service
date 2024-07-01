@@ -3,9 +3,13 @@ use axum::{
     routing::get,
     Router,
 };
-use std::{ops::DerefMut, sync::Arc};
+use std::sync::Arc;
 
-use crate::{api::error::AppResult, context::Context};
+use crate::{
+    api::error::{ApiError, AppResult},
+    context::Context,
+    errors::{Error, ErrorCode},
+};
 
 pub fn router() -> Router {
     Router::new().route("/api/v1/reworks/:rework_id/users/search", get(search_users))
@@ -38,8 +42,14 @@ async fn search_users(
             .replace(" ", "_")
             .replace(|c: char| !c.is_ascii(), "")
     ))
-    .fetch_all(ctx.database.get().await?.deref_mut())
-    .await?;
+    .fetch_all(&ctx.database)
+    .await
+    .map_err(|_| {
+        ApiError(Error {
+            error_code: ErrorCode::InternalServerError,
+            user_feedback: "Failed to fetch users",
+        })
+    })?;
 
     let mut to_remove: Vec<i32> = Vec::new();
     for user in &users {
@@ -47,8 +57,14 @@ async fn search_users(
             sqlx::query_scalar("SELECT 1 FROM rework_stats WHERE user_id = ? AND rework_id = ?")
                 .bind(user.user_id)
                 .bind(rework_id)
-                .fetch_optional(ctx.database.get().await?.deref_mut())
-                .await?
+                .fetch_optional(&ctx.database)
+                .await
+                .map_err(|_| {
+                    ApiError(Error {
+                        error_code: ErrorCode::InternalServerError,
+                        user_feedback: "Failed to check if user is in rework",
+                    })
+                })?
                 .unwrap_or(false);
 
         if !in_rework {

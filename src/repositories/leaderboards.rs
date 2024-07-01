@@ -1,8 +1,8 @@
 use crate::{
-    context::Context, models::leaderboard::Leaderboard, models::rework::Rework,
-    models::stats::APIReworkStats,
+    context::Context,
+    models::{leaderboard::Leaderboard, rework::Rework, stats::APIReworkStats},
 };
-use std::{ops::DerefMut, sync::Arc};
+use std::sync::Arc;
 
 pub struct LeaderboardsRepository {
     context: Arc<Context>,
@@ -21,7 +21,7 @@ impl LeaderboardsRepository {
     ) -> anyhow::Result<Option<Leaderboard>> {
         let rework: Rework = match sqlx::query_as(r#"SELECT * FROM reworks WHERE rework_id = ?"#)
             .bind(rework_id)
-            .fetch_optional(self.context.database.get().await?.deref_mut())
+            .fetch_optional(&self.context.database)
             .await?
         {
             Some(rework) => rework,
@@ -31,7 +31,7 @@ impl LeaderboardsRepository {
         let leaderboard_count: i32 =
             sqlx::query_scalar("SELECT COUNT(*) FROM rework_stats WHERE rework_id = ?")
                 .bind(rework.rework_id)
-                .fetch_one(self.context.database.get().await?.deref_mut())
+                .fetch_one(&self.context.database)
                 .await?;
 
         let rework_users: Vec<APIReworkStats> = sqlx::query_as(
@@ -51,7 +51,7 @@ impl LeaderboardsRepository {
             .bind(rework.rework_id)
             .bind(offset)
             .bind(limit)
-            .fetch_all(self.context.database.get().await?.deref_mut())
+            .fetch_all(&self.context.database)
             .await?;
 
         let leaderboard = Leaderboard {

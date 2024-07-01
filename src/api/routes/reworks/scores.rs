@@ -1,4 +1,4 @@
-use std::{ops::DerefMut, sync::Arc};
+use std::sync::Arc;
 
 use axum::{
     extract::{Extension, Path},
@@ -7,8 +7,9 @@ use axum::{
 };
 
 use crate::{
-    api::error::AppResult,
+    api::error::{ApiError, AppResult},
     context::Context,
+    errors::{Error, ErrorCode},
     models::{
         beatmap::Beatmap,
         score::{APIBaseReworkScore, APIReworkScore},
@@ -28,24 +29,28 @@ async fn get_rework_scores(
 ) -> AppResult<Json<Option<Vec<APIReworkScore>>>> {
     let base_scores: Vec<APIBaseReworkScore> =
         sqlx::query_as(
-            "SELECT user_id, rework_scores.beatmap_id, rework_scores.beatmapset_id, beatmaps.song_name, rework_id, 
-            score_id, rework_scores.max_combo, mods, accuracy, score, num_300s, num_100s, num_50s, num_gekis, 
-            num_katus, num_misses, old_pp, new_pp, 
-            DENSE_RANK() OVER (ORDER BY old_pp DESC) old_rank, DENSE_RANK() OVER (ORDER BY new_pp DESC) new_rank 
-            FROM 
-                rework_scores 
+            "SELECT user_id, rework_scores.beatmap_id, rework_scores.beatmapset_id, beatmaps.song_name, rework_id,
+            score_id, rework_scores.max_combo, mods, accuracy, score, num_300s, num_100s, num_50s, num_gekis,
+            num_katus, num_misses, old_pp, new_pp,
+            DENSE_RANK() OVER (ORDER BY old_pp DESC) old_rank, DENSE_RANK() OVER (ORDER BY new_pp DESC) new_rank
+            FROM
+                rework_scores
             INNER JOIN beatmaps
                 ON rework_scores.beatmap_id = beatmaps.beatmap_id
-            WHERE 
+            WHERE
                 user_id = ? AND rework_id = ?
-            ORDER BY 
+            ORDER BY
                 new_pp DESC
             LIMIT 100",
         )
             .bind(user_id)
             .bind(rework_id)
-            .fetch_all(ctx.database.get().await?.deref_mut())
-            .await?;
+            .fetch_all(&ctx.database)
+            .await
+            .map_err(|_| ApiError(Error{
+                error_code: ErrorCode::InternalServerError,
+                user_feedback: "Failed to fetch rework scores",
+            }))?;
 
     let mut scores: Vec<APIReworkScore> = Vec::new();
     for base_score in base_scores {

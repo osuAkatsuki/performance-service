@@ -1,7 +1,7 @@
 use axum::{extract::Extension, http, routing::get, Router};
 use redis::{aio::ConnectionLike, Cmd};
 use sqlx::MySql;
-use std::{ops::DerefMut, sync::Arc};
+use std::sync::Arc;
 
 use crate::context::Context;
 
@@ -23,7 +23,7 @@ async fn health(Extension(ctx): Extension<Arc<Context>>) -> http::StatusCode {
     }
 
     if let Ok(_result) = sqlx::query_scalar::<MySql, i32>("SELECT 1")
-        .fetch_one(ctx.database.get().await.unwrap().deref_mut())
+        .fetch_one(&ctx.database)
         .await
     {
         is_database_ok = true;

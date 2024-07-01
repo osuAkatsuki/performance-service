@@ -6,7 +6,12 @@ use axum::{
     Json, Router,
 };
 
-use crate::{api::error::AppResult, context::Context, models::leaderboard::Leaderboard, usecases};
+use crate::{
+    api::error::{ApiError, AppResult},
+    context::Context,
+    models::leaderboard::Leaderboard,
+    usecases,
+};
 
 pub fn router() -> Router {
     Router::new().route(
@@ -25,14 +30,15 @@ async fn get_rework_leaderboards(
     Extension(ctx): Extension<Arc<Context>>,
     Path(rework_id): Path<i32>,
     Query(query): Query<LeaderboardQuery>,
-) -> AppResult<Json<Option<Leaderboard>>> {
+) -> AppResult<Json<Leaderboard>> {
     let leaderboard = usecases::leaderboards::fetch_one(
         rework_id,
         (query.page.max(1) - 1) * query.amount,
         query.amount,
         ctx.clone(),
     )
-    .await?;
+    .await
+    .map_err(|e| ApiError(e))?;
 
     Ok(Json(leaderboard))
 }

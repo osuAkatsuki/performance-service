@@ -2,12 +2,11 @@ use clap::Parser;
 use deadpool_lapin::{Manager, Pool};
 use lapin::ConnectionProperties;
 use performance_service::{
-    api, config::Config, context::Context, deploy, individual_recalc, mass_recalc,
-    models::pool::DbPool, processor,
+    api, config::Config, context::Context, deploy, individual_recalc, mass_recalc, processor,
 };
 use redis::{Client, ConnectionAddr, ConnectionInfo, RedisConnectionInfo};
 use s3::{creds::Credentials, Bucket, Region};
-use sqlx::{mysql::MySqlConnectOptions, ConnectOptions};
+use sqlx::{database, mysql::MySqlPoolOptions, ConnectOptions};
 use structured_logger::{async_json::new_writer, Builder};
 
 fn amqp_dsn(username: &str, password: &str, host: &str, port: u16) -> String {
@@ -15,7 +14,7 @@ fn amqp_dsn(username: &str, password: &str, host: &str, port: u16) -> String {
 }
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Error> {
     dotenv::dotenv().ok();
 
     Builder::new()
@@ -24,15 +23,20 @@ async fn main() -> anyhow::Result<()> {
 
     let config = Config::parse();
 
-    let database_options = MySqlConnectOptions::new()
-        .host(&config.database_host)
-        .port(config.database_port)
-        .username(&config.database_username)
-        .password(&config.database_password)
-        .database(&config.database_name)
-        .disable_statement_logging()
-        .clone();
-    let database = DbPool::new(database_options, config.database_pool_max_size)?;
+    let database_url = format!(
+        "mysql://{}:{}@{}:{}/{}",
+        config.database_username,
+        urlencoding::encode(&config.database_password),
+        config.database_host,
+        config.database_port,
+        config.database_name
+    );
+
+    let database = MySqlPoolOptions::new()
+        .acquire_timeout(std::time::Duration::from_secs(15))
+        .max_connections(config.database_pool_max_size)
+        .connect(&database_url)
+        .await?;
 
     let amqp_url = amqp_dsn(
         &config.amqp_username,
