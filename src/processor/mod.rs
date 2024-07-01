@@ -43,8 +43,7 @@ async fn calculate_conceptual_pp(
     context: Arc<Context>,
 ) -> anyhow::Result<f32> {
     let beatmap_bytes =
-        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, &score.beatmap_md5, context)
-            .await?;
+        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, context).await?;
     let beatmap = ConceptualBeatmap::from_bytes(&beatmap_bytes).await?;
 
     let result = beatmap
@@ -77,8 +76,7 @@ async fn calculate_skill_rebalance_pp(
     context: Arc<Context>,
 ) -> anyhow::Result<f32> {
     let beatmap_bytes =
-        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, &score.beatmap_md5, context)
-            .await?;
+        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, context).await?;
     let beatmap = SkillRebalanceBeatmap::from_bytes(&beatmap_bytes).await?;
 
     let result = beatmap
@@ -111,8 +109,7 @@ async fn calculate_cursordance_pp(
     context: Arc<Context>,
 ) -> anyhow::Result<f32> {
     let beatmap_bytes =
-        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, &score.beatmap_md5, context)
-            .await?;
+        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, context).await?;
     let beatmap = CdBeatmap::from_bytes(&beatmap_bytes).await?;
 
     let result = cursordance::osu_2019::OsuPP::new(&beatmap)
@@ -137,8 +134,7 @@ async fn calculate_no_accuracy_pp(
     context: Arc<Context>,
 ) -> anyhow::Result<f32> {
     let beatmap_bytes =
-        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, &score.beatmap_md5, context)
-            .await?;
+        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, context).await?;
     let beatmap = NoAccuracyBeatmap::from_bytes(&beatmap_bytes).await?;
 
     let result = no_accuracy::osu_2019::OsuPP::new(&beatmap)
@@ -163,8 +159,7 @@ async fn calculate_simplfy_relax_pp(
     context: Arc<Context>,
 ) -> anyhow::Result<f32> {
     let beatmap_bytes =
-        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, &score.beatmap_md5, context)
-            .await?;
+        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, context).await?;
     let beatmap = SimplifyRelaxBeatmap::from_bytes(&beatmap_bytes).await?;
 
     let result = simplify_relax::osu_2019::OsuPP::new(&beatmap)
@@ -189,8 +184,7 @@ async fn calculate_improved_miss_penalty_pp(
     context: Arc<Context>,
 ) -> anyhow::Result<f32> {
     let beatmap_bytes =
-        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, &score.beatmap_md5, context)
-            .await?;
+        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, context).await?;
     let beatmap = ImprovedMissPenaltyBeatmap::from_bytes(&beatmap_bytes).await?;
 
     let result = improved_miss_penalty::osu_2019::OsuPP::new(&beatmap)
@@ -215,8 +209,7 @@ async fn calculate_accuracy_fun_pp(
     context: Arc<Context>,
 ) -> anyhow::Result<f32> {
     let beatmap_bytes =
-        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, &score.beatmap_md5, context)
-            .await?;
+        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, context).await?;
     let beatmap = AccuracyFunBeatmap::from_bytes(&beatmap_bytes).await?;
 
     let result = accuracy_fun::osu_2019::OsuPP::new(&beatmap)

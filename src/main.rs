@@ -6,7 +6,6 @@ use performance_service::{
     models::pool::DbPool, processor,
 };
 use redis::{Client, ConnectionAddr, ConnectionInfo, RedisConnectionInfo};
-use s3::{creds::Credentials, Bucket, Region};
 use sqlx::{mysql::MySqlConnectOptions, ConnectOptions};
 use structured_logger::{async_json::new_writer, Builder};
 
@@ -63,28 +62,11 @@ async fn main() -> anyhow::Result<()> {
     };
     let redis = Client::open(redis_connection_options)?;
 
-    let custom_region = Region::Custom {
-        region: config.aws_region.clone(),
-        endpoint: config.aws_endpoint_url.clone(),
-    };
-    let bucket = Bucket::new(
-        &config.aws_bucket_name,
-        custom_region,
-        Credentials {
-            access_key: Some(config.aws_access_key_id.clone()),
-            secret_key: Some(config.aws_secret_access_key.clone()),
-            security_token: None,
-            session_token: None,
-            expiration: None,
-        },
-    )?;
-
     let context = Context {
         config,
         database,
         amqp_channel,
         redis,
-        bucket,
     };
 
     match context.config.app_component.as_str() {
