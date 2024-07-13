@@ -52,7 +52,7 @@ flashlight-hotfix = { package = "akatsuki-pp", git = "https://github.com/osuAkat
 remove-accuracy-pp = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "5b6926bef27dfc16a8fec2fd14faaa07cbd214a4", features = [
     "async_tokio",
 ] }
-stream-nerf-speed-value = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "ef06bae1410aff4809487ddd71adb113a415a959", features = [
+stream-nerf-speed-value = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "bc66e6b227d33774f46fb5557a5c630c70d57411", features = [
     "async_tokio",
 ] }
 remove-manual-adjustments = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "68063c480e4b4d3d5872d1ce25cf260ff0e84b38", features = [
