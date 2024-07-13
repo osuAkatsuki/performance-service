@@ -19,164 +19,11 @@ use crate::{
     usecases,
 };
 
-use accuracy_fun::Beatmap as AccuracyFunBeatmap;
-use conceptual_rework::{
-    Beatmap as ConceptualBeatmap, BeatmapExt as ConceptualBeatmapExt,
-    GameMode as ConceptualGameMode,
-};
-use cursordance::Beatmap as CdBeatmap;
 use improved_miss_penalty::Beatmap as ImprovedMissPenaltyBeatmap;
-use no_accuracy::Beatmap as NoAccuracyBeatmap;
-use simplify_relax::Beatmap as SimplifyRelaxBeatmap;
-use skill_rebalance::{
-    Beatmap as SkillRebalanceBeatmap, BeatmapExt as SkillRebalanceBeatmapExt,
-    GameMode as SkillRebalanceGameMode,
-};
 
 fn round(x: f32, decimals: u32) -> f32 {
     let y = 10i32.pow(decimals) as f32;
     (x * y).round() / y
-}
-
-async fn calculate_conceptual_pp(
-    score: &RippleScore,
-    context: Arc<Context>,
-) -> anyhow::Result<f32> {
-    let beatmap_bytes =
-        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, context).await?;
-    let beatmap = ConceptualBeatmap::from_bytes(&beatmap_bytes).await?;
-
-    let result = beatmap
-        .pp()
-        .mode(match score.play_mode {
-            0 => ConceptualGameMode::Osu,
-            1 => ConceptualGameMode::Taiko,
-            2 => ConceptualGameMode::Catch,
-            3 => ConceptualGameMode::Mania,
-            _ => unreachable!(),
-        })
-        .mods(score.mods as u32)
-        .combo(score.max_combo as usize)
-        .n300(score.count_300 as usize)
-        .n100(score.count_100 as usize)
-        .n50(score.count_50 as usize)
-        .n_misses(score.count_misses as usize)
-        .calculate();
-
-    let mut pp = round(result.pp() as f32, 2);
-    if pp.is_infinite() || pp.is_nan() {
-        pp = 0.0;
-    }
-
-    Ok(pp)
-}
-
-async fn calculate_skill_rebalance_pp(
-    score: &RippleScore,
-    context: Arc<Context>,
-) -> anyhow::Result<f32> {
-    let beatmap_bytes =
-        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, context).await?;
-    let beatmap = SkillRebalanceBeatmap::from_bytes(&beatmap_bytes).await?;
-
-    let result = beatmap
-        .pp()
-        .mode(match score.play_mode {
-            0 => SkillRebalanceGameMode::Osu,
-            1 => SkillRebalanceGameMode::Taiko,
-            2 => SkillRebalanceGameMode::Catch,
-            3 => SkillRebalanceGameMode::Mania,
-            _ => unreachable!(),
-        })
-        .mods(score.mods as u32)
-        .combo(score.max_combo as usize)
-        .n300(score.count_300 as usize)
-        .n100(score.count_100 as usize)
-        .n50(score.count_50 as usize)
-        .n_misses(score.count_misses as usize)
-        .calculate();
-
-    let mut pp = round(result.pp() as f32, 2);
-    if pp.is_infinite() || pp.is_nan() {
-        pp = 0.0;
-    }
-
-    Ok(pp)
-}
-
-async fn calculate_cursordance_pp(
-    score: &RippleScore,
-    context: Arc<Context>,
-) -> anyhow::Result<f32> {
-    let beatmap_bytes =
-        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, context).await?;
-    let beatmap = CdBeatmap::from_bytes(&beatmap_bytes).await?;
-
-    let result = cursordance::osu_2019::OsuPP::new(&beatmap)
-        .mods(score.mods as u32)
-        .combo(score.max_combo as usize)
-        .n300(score.count_300 as usize)
-        .n100(score.count_100 as usize)
-        .n50(score.count_50 as usize)
-        .misses(score.count_misses as usize)
-        .calculate();
-
-    let mut pp = round(result.pp as f32, 2);
-    if pp.is_infinite() || pp.is_nan() {
-        pp = 0.0;
-    }
-
-    Ok(pp)
-}
-
-async fn calculate_no_accuracy_pp(
-    score: &RippleScore,
-    context: Arc<Context>,
-) -> anyhow::Result<f32> {
-    let beatmap_bytes =
-        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, context).await?;
-    let beatmap = NoAccuracyBeatmap::from_bytes(&beatmap_bytes).await?;
-
-    let result = no_accuracy::osu_2019::OsuPP::new(&beatmap)
-        .mods(score.mods as u32)
-        .combo(score.max_combo as usize)
-        .n300(score.count_300 as usize)
-        .n100(score.count_100 as usize)
-        .n50(score.count_50 as usize)
-        .misses(score.count_misses as usize)
-        .calculate();
-
-    let mut pp = round(result.pp as f32, 2);
-    if pp.is_infinite() || pp.is_nan() {
-        pp = 0.0;
-    }
-
-    Ok(pp)
-}
-
-async fn calculate_simplfy_relax_pp(
-    score: &RippleScore,
-    context: Arc<Context>,
-) -> anyhow::Result<f32> {
-    let beatmap_bytes =
-        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, context).await?;
-    let beatmap = SimplifyRelaxBeatmap::from_bytes(&beatmap_bytes).await?;
-
-    let result = simplify_relax::osu_2019::OsuPP::new(&beatmap)
-        .mods(score.mods as u32)
-        .combo(score.max_combo as usize)
-        .n300(score.count_300 as usize)
-        .n100(score.count_100 as usize)
-        .n50(score.count_50 as usize)
-        .misses(score.count_misses as usize)
-        .calculate();
-
-    let mut pp = round(result.pp as f32, 2);
-    if pp.is_infinite() || pp.is_nan() {
-        pp = 0.0;
-    }
-
-    Ok(pp)
 }
 
 async fn calculate_improved_miss_penalty_pp(
@@ -204,31 +51,6 @@ async fn calculate_improved_miss_penalty_pp(
     Ok(pp)
 }
 
-async fn calculate_accuracy_fun_pp(
-    score: &RippleScore,
-    context: Arc<Context>,
-) -> anyhow::Result<f32> {
-    let beatmap_bytes =
-        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, context).await?;
-    let beatmap = AccuracyFunBeatmap::from_bytes(&beatmap_bytes).await?;
-
-    let result = accuracy_fun::osu_2019::OsuPP::new(&beatmap)
-        .mods(score.mods as u32)
-        .combo(score.max_combo as usize)
-        .n300(score.count_300 as usize)
-        .n100(score.count_100 as usize)
-        .n50(score.count_50 as usize)
-        .misses(score.count_misses as usize)
-        .calculate();
-
-    let mut pp = round(result.pp as f32, 2);
-    if pp.is_infinite() || pp.is_nan() {
-        pp = 0.0;
-    }
-
-    Ok(pp)
-}
-
 async fn process_scores(
     rework: &Rework,
     scores: Vec<RippleScore>,
@@ -238,14 +60,7 @@ async fn process_scores(
 
     for score in &scores {
         let new_pp = match rework.rework_id {
-            10 => calculate_conceptual_pp(score, context.clone()).await?,
-            12 => calculate_conceptual_pp(score, context.clone()).await?,
-            13 => calculate_skill_rebalance_pp(score, context.clone()).await?,
-            16 => calculate_cursordance_pp(score, context.clone()).await?,
-            17 => calculate_no_accuracy_pp(score, context.clone()).await?,
-            18 => calculate_simplfy_relax_pp(score, context.clone()).await?,
             19 => calculate_improved_miss_penalty_pp(score, context.clone()).await?,
-            20 => calculate_accuracy_fun_pp(score, context.clone()).await?,
             _ => unreachable!(),
         };
 

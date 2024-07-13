@@ -41,27 +41,9 @@ akatsuki-pp-rs = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuk
     "async_tokio",
 ] }
 reqwest = "0.11"
-conceptual-rework = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", branch = "conceptual-rework", features = [
-    "async_tokio",
-] }
 async-trait = "0.1.62"
-skill-rebalance = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", branch = "skill-rebalance", features = [
-    "async_tokio",
-] }
 structured-logger = "1.0.3"
-cursordance = { package = "akatsuki-pp", git = "https://github.com/CursorDance/akatsuki-pp-rs", rev = "56a71011e13274e63f6548611f3d5c822377c0d3", features = [
-    "async_tokio",
-] }
-no-accuracy = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "d3ab5af7a63f17a2a40bbce573b06ea451375638", features = [
-    "async_tokio",
-] }
-simplify-relax = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "ce896ca661de4aa4c0c6739a703c4a162426878b", features = [
-    "async_tokio",
-] }
 improved-miss-penalty = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "bb1c8ee99a6788f4706fbadee47894590c4fded6", features = [
-    "async_tokio",
-] }
-accuracy-fun = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "879fd8caa2cb082a5b9c0761fc2ddca3b283b226", features = [
     "async_tokio",
 ] }
 md5 = "0.7.0"
