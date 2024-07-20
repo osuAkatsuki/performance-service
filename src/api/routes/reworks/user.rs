@@ -92,7 +92,7 @@ async fn get_rework_stats(
 
     let stats = stats.unwrap();
 
-    let user_info: (String, String) =
+    let (username, user_country): (String, String) =
         sqlx::query_as("SELECT username, country FROM users WHERE id = ?")
             .bind(user_id)
             .fetch_one(ctx.database.get().await?.deref_mut())
@@ -133,8 +133,8 @@ async fn get_rework_stats(
 
     let api_user = APIReworkStats::from_stats(
         stats,
-        user_info.0,
-        user_info.1,
+        user_country,
+        username,
         (old_rank_idx.unwrap_or(-1) + 1) as u64,
         (new_rank_idx.unwrap_or(-1) + 1) as u64,
     );
