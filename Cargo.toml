@@ -47,9 +47,3 @@ improved-miss-penalty = { package = "akatsuki-pp", git = "https://github.com/osu
     "async_tokio",
 ] }
 md5 = "0.7.0"
-
-[profile.release]
-lto = "fat"
-codegen-units = 16
-opt-level = 3
-panic = "abort"
