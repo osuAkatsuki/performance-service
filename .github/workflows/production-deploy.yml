@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - enable-processor
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
