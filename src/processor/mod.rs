@@ -19,7 +19,12 @@ use crate::{
     usecases,
 };
 
+use fix_inconsistent_powers::Beatmap as FixInconsistentPowersBeatmap;
+use flashlight_hotfix::Beatmap as FlashlightHotfixBeatmap;
 use improved_miss_penalty::Beatmap as ImprovedMissPenaltyBeatmap;
+use remove_accuracy_pp::Beatmap as RemoveAccuracyBeatmap;
+use remove_manual_adjustments::Beatmap as RemoveManualAdjustmentsBeatmap;
+use stream_nerf_speed_value::Beatmap as StreamNerfSpeedValueBeatmap;
 
 fn round(x: f32, decimals: u32) -> f32 {
     let y = 10i32.pow(decimals) as f32;
@@ -51,6 +56,131 @@ async fn calculate_improved_miss_penalty_pp(
     Ok(pp)
 }
 
+async fn calculate_flashlight_hotfix_pp(
+    score: &RippleScore,
+    context: Arc<Context>,
+) -> anyhow::Result<f32> {
+    let beatmap_bytes =
+        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, context).await?;
+    let beatmap = FlashlightHotfixBeatmap::from_bytes(&beatmap_bytes).await?;
+
+    let result = flashlight_hotfix::osu_2019::OsuPP::new(&beatmap)
+        .mods(score.mods as u32)
+        .combo(score.max_combo as usize)
+        .n300(score.count_300 as usize)
+        .n100(score.count_100 as usize)
+        .n50(score.count_50 as usize)
+        .misses(score.count_misses as usize)
+        .calculate();
+
+    let mut pp = round(result.pp as f32, 2);
+    if pp.is_infinite() || pp.is_nan() {
+        pp = 0.0;
+    }
+
+    Ok(pp)
+}
+
+async fn calculate_remove_accuracy_pp(
+    score: &RippleScore,
+    context: Arc<Context>,
+) -> anyhow::Result<f32> {
+    let beatmap_bytes =
+        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, context).await?;
+    let beatmap = RemoveAccuracyBeatmap::from_bytes(&beatmap_bytes).await?;
+
+    let result = remove_accuracy_pp::osu_2019::OsuPP::new(&beatmap)
+        .mods(score.mods as u32)
+        .combo(score.max_combo as usize)
+        .n300(score.count_300 as usize)
+        .n100(score.count_100 as usize)
+        .n50(score.count_50 as usize)
+        .misses(score.count_misses as usize)
+        .calculate();
+
+    let mut pp = round(result.pp as f32, 2);
+    if pp.is_infinite() || pp.is_nan() {
+        pp = 0.0;
+    }
+
+    Ok(pp)
+}
+
+async fn calculate_stream_nerf_speed_value_pp(
+    score: &RippleScore,
+    context: Arc<Context>,
+) -> anyhow::Result<f32> {
+    let beatmap_bytes =
+        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, context).await?;
+    let beatmap = StreamNerfSpeedValueBeatmap::from_bytes(&beatmap_bytes).await?;
+
+    let result = stream_nerf_speed_value::osu_2019::OsuPP::new(&beatmap)
+        .mods(score.mods as u32)
+        .combo(score.max_combo as usize)
+        .n300(score.count_300 as usize)
+        .n100(score.count_100 as usize)
+        .n50(score.count_50 as usize)
+        .misses(score.count_misses as usize)
+        .calculate();
+
+    let mut pp = round(result.pp as f32, 2);
+    if pp.is_infinite() || pp.is_nan() {
+        pp = 0.0;
+    }
+
+    Ok(pp)
+}
+
+async fn calculate_remove_manual_adjustments_pp(
+    score: &RippleScore,
+    context: Arc<Context>,
+) -> anyhow::Result<f32> {
+    let beatmap_bytes =
+        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, context).await?;
+    let beatmap = RemoveManualAdjustmentsBeatmap::from_bytes(&beatmap_bytes).await?;
+
+    let result = remove_manual_adjustments::osu_2019::OsuPP::new(&beatmap)
+        .mods(score.mods as u32)
+        .combo(score.max_combo as usize)
+        .n300(score.count_300 as usize)
+        .n100(score.count_100 as usize)
+        .n50(score.count_50 as usize)
+        .misses(score.count_misses as usize)
+        .calculate();
+
+    let mut pp = round(result.pp as f32, 2);
+    if pp.is_infinite() || pp.is_nan() {
+        pp = 0.0;
+    }
+
+    Ok(pp)
+}
+
+async fn calculate_fix_inconsistent_powers_pp(
+    score: &RippleScore,
+    context: Arc<Context>,
+) -> anyhow::Result<f32> {
+    let beatmap_bytes =
+        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, context).await?;
+    let beatmap = FixInconsistentPowersBeatmap::from_bytes(&beatmap_bytes).await?;
+
+    let result = fix_inconsistent_powers::osu_2019::OsuPP::new(&beatmap)
+        .mods(score.mods as u32)
+        .combo(score.max_combo as usize)
+        .n300(score.count_300 as usize)
+        .n100(score.count_100 as usize)
+        .n50(score.count_50 as usize)
+        .misses(score.count_misses as usize)
+        .calculate();
+
+    let mut pp = round(result.pp as f32, 2);
+    if pp.is_infinite() || pp.is_nan() {
+        pp = 0.0;
+    }
+
+    Ok(pp)
+}
+
 async fn process_scores(
     rework: &Rework,
     scores: Vec<RippleScore>,
@@ -61,6 +191,11 @@ async fn process_scores(
     for score in &scores {
         let new_pp = match rework.rework_id {
             19 => calculate_improved_miss_penalty_pp(score, context.clone()).await?,
+            21 => calculate_flashlight_hotfix_pp(score, context.clone()).await?,
+            22 => calculate_remove_accuracy_pp(score, context.clone()).await?,
+            23 => calculate_stream_nerf_speed_value_pp(score, context.clone()).await?,
+            24 => calculate_remove_manual_adjustments_pp(score, context.clone()).await?,
+            25 => calculate_fix_inconsistent_powers_pp(score, context.clone()).await?,
             _ => unreachable!(),
         };
 
