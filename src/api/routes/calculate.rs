@@ -1,6 +1,7 @@
 use crate::usecases;
 use crate::{api::error::AppResult, context::Context};
-use akatsuki_pp_rs::{Beatmap, BeatmapExt, GameMode, PerformanceAttributes};
+use akatsuki_pp_rs::model::mode::GameMode;
+use akatsuki_pp_rs::{any::PerformanceAttributes, Beatmap};
 use axum::response::IntoResponse;
 use axum::{extract::Extension, routing::post, Json, Router};
 use reqwest::StatusCode;
@@ -44,20 +45,20 @@ async fn calculate_relax_pp(
 ) -> anyhow::Result<CalculateResponse> {
     let beatmap_bytes =
         usecases::beatmaps::fetch_beatmap_osu_file(request.beatmap_id, context).await?;
-    let beatmap = Beatmap::from_bytes(&beatmap_bytes).await?;
+    let beatmap = Beatmap::from_bytes(&beatmap_bytes)?;
 
     let mut calculate = akatsuki_pp_rs::osu_2019::OsuPP::new(&beatmap)
         .mods(request.mods as u32)
-        .combo(request.max_combo as usize);
+        .combo(request.max_combo as u32);
 
-    calculate = calculate.misses(request.miss_count as usize);
+    calculate = calculate.misses(request.miss_count as u32);
     if request.accuracy.is_some() {
         calculate = calculate.accuracy(request.accuracy.unwrap());
     } else {
         calculate = calculate
-            .n300(request.count_300.unwrap() as usize)
-            .n100(request.count_100.unwrap() as usize)
-            .n50(request.count_50.unwrap() as usize);
+            .n300(request.count_300.unwrap() as u32)
+            .n100(request.count_100.unwrap() as u32)
+            .n50(request.count_50.unwrap() as u32);
     }
 
     let result = calculate.calculate();
@@ -89,11 +90,11 @@ async fn calculate_rosu_pp(
 ) -> anyhow::Result<CalculateResponse> {
     let beatmap_bytes =
         usecases::beatmaps::fetch_beatmap_osu_file(request.beatmap_id, context).await?;
-    let beatmap = Beatmap::from_bytes(&beatmap_bytes).await?;
+    let beatmap = Beatmap::from_bytes(&beatmap_bytes)?;
 
     let mut calculate = beatmap
-        .pp()
-        .mode(match request.mode {
+        .performance()
+        .mode_or_ignore(match request.mode {
             0 => GameMode::Osu,
             1 => GameMode::Taiko,
             2 => GameMode::Catch,
@@ -101,16 +102,17 @@ async fn calculate_rosu_pp(
             _ => unreachable!(),
         })
         .mods(request.mods as u32)
-        .combo(request.max_combo as usize);
+        .lazer(false)
+        .combo(request.max_combo as u32);
 
-    calculate = calculate.n_misses(request.miss_count as usize);
+    calculate = calculate.misses(request.miss_count as u32);
     if request.accuracy.is_some() {
         calculate = calculate.accuracy(request.accuracy.unwrap() as f64);
     } else {
         calculate = calculate
-            .n300(request.count_300.unwrap() as usize)
-            .n100(request.count_100.unwrap() as usize)
-            .n50(request.count_50.unwrap() as usize);
+            .n300(request.count_300.unwrap() as u32)
+            .n100(request.count_100.unwrap() as u32)
+            .n50(request.count_50.unwrap() as u32);
     }
 
     let result = calculate.calculate();

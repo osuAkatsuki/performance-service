@@ -103,17 +103,18 @@ dependencies = [
 [[package]]
 name = "akatsuki-pp"
 version = "1.0.1"
-source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=b96019f50aa7d09bcbde60016481a69df04315e4#b96019f50aa7d09bcbde60016481a69df04315e4"
+source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=bb1c8ee99a6788f4706fbadee47894590c4fded6#bb1c8ee99a6788f4706fbadee47894590c4fded6"
 dependencies = [
  "tokio",
 ]
 
 [[package]]
 name = "akatsuki-pp"
-version = "1.0.1"
-source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=bb1c8ee99a6788f4706fbadee47894590c4fded6#bb1c8ee99a6788f4706fbadee47894590c4fded6"
+version = "1.1.1"
+source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=3d5e6ac6b37e63c3fe80ae38b2e40294840c84d7#3d5e6ac6b37e63c3fe80ae38b2e40294840c84d7"
 dependencies = [
- "tokio",
+ "rosu-map",
+ "rosu-mods",
 ]
 
 [[package]]
@@ -2093,8 +2094,8 @@ dependencies = [
  "akatsuki-pp 1.0.1 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=6e840d57201255cf7496cc5191b8058d7260265b)",
  "akatsuki-pp 1.0.1 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=72fa5510ef66898308fc6bb3b2f9d3be1dd606c5)",
  "akatsuki-pp 1.0.1 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=773fc16a60546c92b501ad1782757ab897365227)",
- "akatsuki-pp 1.0.1 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=b96019f50aa7d09bcbde60016481a69df04315e4)",
  "akatsuki-pp 1.0.1 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=bb1c8ee99a6788f4706fbadee47894590c4fded6)",
+ "akatsuki-pp 1.1.1",
  "anyhow",
  "async-trait",
  "axum",
@@ -2574,6 +2575,17 @@ dependencies = [
  "quote",
  "syn 1.0.109",
 ]
+
+[[package]]
+name = "rosu-map"
+version = "0.1.2"
+source = "git+https://github.com/MaxOhn/rosu-map?branch=pp-update#9648993aaeab590fd1df32b5d1b9936da82b1473"
+
+[[package]]
+name = "rosu-mods"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3966ad347b6a8140feaa2424c947ada9b69d29f6966ef2590db34d456eb137be"
 
 [[package]]
 name = "rsa"
