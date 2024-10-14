@@ -2,6 +2,7 @@ use crate::usecases;
 use crate::{api::error::AppResult, context::Context};
 use akatsuki_pp_rs::model::mode::GameMode;
 use akatsuki_pp_rs::{any::PerformanceAttributes, Beatmap};
+use anyhow::anyhow;
 use axum::response::IntoResponse;
 use axum::{extract::Extension, routing::post, Json, Router};
 use reqwest::StatusCode;
@@ -94,13 +95,20 @@ async fn calculate_rosu_pp(
 
     let mut calculate = beatmap
         .performance()
-        .mode_or_ignore(match request.mode {
+        .try_mode(match request.mode {
             0 => GameMode::Osu,
             1 => GameMode::Taiko,
             2 => GameMode::Catch,
             3 => GameMode::Mania,
             _ => unreachable!(),
         })
+        .map_err(|_| {
+            anyhow!(
+                "failed to set mode {} for beatmap {}",
+                request.mode,
+                request.beatmap_id
+            )
+        })?
         .mods(request.mods as u32)
         .lazer(false)
         .combo(request.max_combo as u32);
