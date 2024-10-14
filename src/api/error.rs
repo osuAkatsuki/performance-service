@@ -1,6 +1,6 @@
 use axum::{body::Body, http::Response, response::IntoResponse};
 
-pub struct AppError(anyhow::Error);
+pub struct AppError();
 pub type AppResult<T> = Result<T, AppError>;
 
 impl IntoResponse for AppError {
@@ -19,7 +19,7 @@ impl<E> From<E> for AppError
 where
     E: Into<anyhow::Error>,
 {
-    fn from(err: E) -> Self {
-        Self(err.into())
+    fn from(_err: E) -> Self {
+        Self()
     }
 }

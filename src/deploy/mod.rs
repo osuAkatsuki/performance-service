@@ -1,9 +1,10 @@
 use crate::{context::Context, models::score::RippleScore, usecases};
-use akatsuki_pp_rs::{Beatmap, BeatmapExt, GameMode};
+use akatsuki_pp_rs::model::mode::GameMode;
+use akatsuki_pp_rs::Beatmap;
+use anyhow::anyhow;
 use redis::AsyncCommands;
-use std::{collections::HashMap, ops::DerefMut, sync::Arc, time::SystemTime};
-
 use std::io::Write;
+use std::{collections::HashMap, ops::DerefMut, sync::Arc, time::SystemTime};
 use tokio::sync::Mutex;
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -49,7 +50,7 @@ async fn calculate_special_pp(
     } else {
         let beatmap_bytes =
             usecases::beatmaps::fetch_beatmap_osu_file(request.beatmap_id, context.clone()).await?;
-        let beatmap = Beatmap::from_bytes(&beatmap_bytes).await?;
+        let beatmap = Beatmap::from_bytes(&beatmap_bytes)?;
 
         recalc_mutex
             .beatmaps
@@ -62,11 +63,11 @@ async fn calculate_special_pp(
 
     let result = akatsuki_pp_rs::osu_2019::OsuPP::new(&beatmap)
         .mods(request.mods as u32)
-        .combo(request.max_combo as usize)
-        .misses(request.miss_count as usize)
-        .n300(request.count_300 as usize)
-        .n100(request.count_100 as usize)
-        .n50(request.count_50 as usize)
+        .combo(request.max_combo as u32)
+        .misses(request.miss_count as u32)
+        .n300(request.count_300 as u32)
+        .n100(request.count_100 as u32)
+        .n50(request.count_50 as u32)
         .calculate();
 
     let mut pp = round(result.pp as f32, 2);
@@ -98,7 +99,7 @@ async fn calculate_rosu_pp(
     } else {
         let beatmap_bytes =
             usecases::beatmaps::fetch_beatmap_osu_file(request.beatmap_id, context.clone()).await?;
-        let beatmap = Beatmap::from_bytes(&beatmap_bytes).await?;
+        let beatmap = Beatmap::from_bytes(&beatmap_bytes)?;
 
         recalc_mutex
             .beatmaps
@@ -110,20 +111,28 @@ async fn calculate_rosu_pp(
     drop(recalc_mutex);
 
     let result = beatmap
-        .pp()
-        .mode(match request.mode {
+        .performance()
+        .try_mode(match request.mode {
             0 => GameMode::Osu,
             1 => GameMode::Taiko,
             2 => GameMode::Catch,
             3 => GameMode::Mania,
             _ => unreachable!(),
         })
+        .map_err(|_| {
+            anyhow!(
+                "failed to set mode {} for beatmap {}",
+                request.mode,
+                request.beatmap_id
+            )
+        })?
         .mods(request.mods as u32)
-        .combo(request.max_combo as usize)
-        .n300(request.count_300 as usize)
-        .n100(request.count_100 as usize)
-        .n50(request.count_50 as usize)
-        .n_misses(request.miss_count as usize)
+        .lazer(false)
+        .combo(request.max_combo as u32)
+        .n300(request.count_300 as u32)
+        .n100(request.count_100 as u32)
+        .n50(request.count_50 as u32)
+        .misses(request.miss_count as u32)
         .calculate();
 
     let mut pp = round(result.pp() as f32, 2);
