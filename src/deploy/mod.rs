@@ -196,7 +196,7 @@ async fn recalculate_score(
         score_id = score.id,
         score_mode = score.play_mode,
         old_pp = score.pp,
-        new_pp = score.pp;
+        new_pp = response.pp;
         "Recalculated score",
     );
 
