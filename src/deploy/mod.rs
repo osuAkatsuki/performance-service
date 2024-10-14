@@ -5,7 +5,7 @@ use anyhow::anyhow;
 use redis::AsyncCommands;
 use std::io::Write;
 use std::{collections::HashMap, ops::DerefMut, sync::Arc, time::SystemTime};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, Semaphore};
 
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct CalculateRequest {
@@ -35,7 +35,7 @@ const RX: i32 = 1 << 7;
 const AP: i32 = 1 << 13;
 
 async fn calculate_special_pp(
-    request: &CalculateRequest,
+    request: CalculateRequest,
     context: Arc<Context>,
     recalc_ctx: &Arc<Mutex<RecalculateContext>>,
 ) -> anyhow::Result<CalculateResponse> {
@@ -61,30 +61,35 @@ async fn calculate_special_pp(
 
     drop(recalc_mutex);
 
-    let result = akatsuki_pp_rs::osu_2019::OsuPP::new(&beatmap)
-        .mods(request.mods as u32)
-        .combo(request.max_combo as u32)
-        .misses(request.miss_count as u32)
-        .n300(request.count_300 as u32)
-        .n100(request.count_100 as u32)
-        .n50(request.count_50 as u32)
-        .calculate();
+    let result = tokio::task::spawn_blocking(move || {
+        let result = akatsuki_pp_rs::osu_2019::OsuPP::new(&beatmap)
+            .mods(request.mods as u32)
+            .combo(request.max_combo as u32)
+            .misses(request.miss_count as u32)
+            .n300(request.count_300 as u32)
+            .n100(request.count_100 as u32)
+            .n50(request.count_50 as u32)
+            .calculate();
 
-    let mut pp = round(result.pp as f32, 2);
-    if pp.is_infinite() || pp.is_nan() {
-        pp = 0.0;
-    }
+        let mut pp = round(result.pp as f32, 2);
+        if pp.is_infinite() || pp.is_nan() {
+            pp = 0.0;
+        }
 
-    let mut stars = round(result.difficulty.stars as f32, 2);
-    if stars.is_infinite() || stars.is_nan() {
-        stars = 0.0;
-    }
+        let mut stars = round(result.difficulty.stars as f32, 2);
+        if stars.is_infinite() || stars.is_nan() {
+            stars = 0.0;
+        }
 
-    Ok(CalculateResponse { stars, pp })
+        Ok(CalculateResponse { stars, pp })
+    })
+    .await?;
+
+    result
 }
 
 async fn calculate_rosu_pp(
-    request: &CalculateRequest,
+    request: CalculateRequest,
     context: Arc<Context>,
     recalc_ctx: &Arc<Mutex<RecalculateContext>>,
 ) -> anyhow::Result<CalculateResponse> {
@@ -110,42 +115,47 @@ async fn calculate_rosu_pp(
 
     drop(recalc_mutex);
 
-    let result = beatmap
-        .performance()
-        .try_mode(match request.mode {
-            0 => GameMode::Osu,
-            1 => GameMode::Taiko,
-            2 => GameMode::Catch,
-            3 => GameMode::Mania,
-            _ => unreachable!(),
-        })
-        .map_err(|_| {
-            anyhow!(
-                "failed to set mode {} for beatmap {}",
-                request.mode,
-                request.beatmap_id
-            )
-        })?
-        .mods(request.mods as u32)
-        .lazer(false)
-        .combo(request.max_combo as u32)
-        .n300(request.count_300 as u32)
-        .n100(request.count_100 as u32)
-        .n50(request.count_50 as u32)
-        .misses(request.miss_count as u32)
-        .calculate();
+    let result = tokio::task::spawn_blocking(move || {
+        let result = beatmap
+            .performance()
+            .try_mode(match request.mode {
+                0 => GameMode::Osu,
+                1 => GameMode::Taiko,
+                2 => GameMode::Catch,
+                3 => GameMode::Mania,
+                _ => unreachable!(),
+            })
+            .map_err(|_| {
+                anyhow!(
+                    "failed to set mode {} for beatmap {}",
+                    request.mode,
+                    request.beatmap_id
+                )
+            })?
+            .mods(request.mods as u32)
+            .lazer(false)
+            .combo(request.max_combo as u32)
+            .n300(request.count_300 as u32)
+            .n100(request.count_100 as u32)
+            .n50(request.count_50 as u32)
+            .misses(request.miss_count as u32)
+            .calculate();
 
-    let mut pp = round(result.pp() as f32, 2);
-    if pp.is_infinite() || pp.is_nan() {
-        pp = 0.0;
-    }
+        let mut pp = round(result.pp() as f32, 2);
+        if pp.is_infinite() || pp.is_nan() {
+            pp = 0.0;
+        }
 
-    let mut stars = round(result.stars() as f32, 2);
-    if stars.is_infinite() || stars.is_nan() {
-        stars = 0.0;
-    }
+        let mut stars = round(result.stars() as f32, 2);
+        if stars.is_infinite() || stars.is_nan() {
+            stars = 0.0;
+        }
 
-    Ok(CalculateResponse { stars, pp })
+        Ok(CalculateResponse { stars, pp })
+    })
+    .await?;
+
+    result
 }
 
 async fn recalculate_score(
@@ -166,9 +176,9 @@ async fn recalculate_score(
     };
 
     let response = if score.mods & RX > 0 && score.play_mode == 0 {
-        calculate_special_pp(&request, ctx.clone(), &recalc_ctx).await?
+        calculate_special_pp(request, ctx.clone(), &recalc_ctx).await?
     } else {
-        calculate_rosu_pp(&request, ctx.clone(), &recalc_ctx).await?
+        calculate_rosu_pp(request, ctx.clone(), &recalc_ctx).await?
     };
 
     let rx = if score.mods & RX > 0 {
@@ -194,6 +204,8 @@ async fn recalculate_score(
 
     Ok(())
 }
+
+const MAX_CONCURRENT_TASKS: usize = 300;
 
 async fn recalculate_mode_scores(
     mode: i32,
@@ -236,31 +248,38 @@ async fn recalculate_mode_scores(
     .fetch_all(ctx.database.get().await?.deref_mut())
     .await?;
 
-    const CHUNK_SIZE: usize = 100;
-
     let mut scores_recalculated = 0;
     let score_count = scores.len();
 
-    for score_chunk in scores.chunks(CHUNK_SIZE).map(|c| c.to_vec()) {
-        let mut futures = Vec::new();
+    let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_TASKS));
 
-        for score in score_chunk {
-            let future = tokio::spawn(recalculate_score(score, ctx.clone(), recalc_ctx.clone()));
-            futures.push(future);
-        }
+    let tasks = scores.into_iter().map(|score| {
+        let semaphore = semaphore.clone();
+        let ctx = ctx.clone();
+        let recalc_ctx = recalc_ctx.clone();
 
-        futures::future::try_join_all(futures).await?;
+        tokio::spawn(async move {
+            let permit = semaphore.acquire().await?;
 
-        scores_recalculated += CHUNK_SIZE;
+            recalculate_score(score, ctx, recalc_ctx).await?;
 
-        if scores_recalculated % (CHUNK_SIZE * 10) == 0 {
-            log::info!(
-                scores_recalculated = scores_recalculated,
-                scores_left = (score_count - scores_recalculated);
-                "Recalculated scores",
-            );
-        }
-    }
+            scores_recalculated += 1;
+
+            if scores_recalculated % (MAX_CONCURRENT_TASKS * 10) == 0 {
+                log::info!(
+                    scores_recalculated = scores_recalculated,
+                    scores_left = (score_count - scores_recalculated);
+                    "Recalculated scores",
+                );
+            }
+
+            drop(permit);
+
+            Ok::<(), anyhow::Error>(())
+        })
+    });
+
+    futures::future::join_all(tasks).await;
 
     Ok(())
 }
@@ -352,23 +371,24 @@ async fn recalculate_statuses(
         .fetch_all(ctx.database.get().await?.deref_mut())
         .await?;
 
-    for beatmap_chunk in beatmap_md5s.chunks(100).map(|c| c.to_vec()) {
-        let mut futures = Vec::with_capacity(beatmap_chunk.len());
+    let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_TASKS));
 
-        for (beatmap_md5,) in beatmap_chunk {
-            let future = tokio::spawn(recalculate_status(
-                user_id,
-                mode,
-                rx,
-                beatmap_md5,
-                ctx.clone(),
-            ));
+    let tasks = beatmap_md5s.into_iter().map(|(beatmap_md5,)| {
+        let semaphore = semaphore.clone();
+        let ctx = ctx.clone();
 
-            futures.push(future);
-        }
+        tokio::spawn(async move {
+            let permit = semaphore.acquire().await?;
 
-        futures::future::try_join_all(futures).await?;
-    }
+            recalculate_status(user_id, mode, rx, beatmap_md5, ctx).await?;
+
+            drop(permit);
+
+            Ok::<(), anyhow::Error>(())
+        })
+    });
+
+    futures::future::join_all(tasks).await;
 
     Ok(())
 }
@@ -517,31 +537,37 @@ async fn recalculate_mode_users(mode: i32, rx: i32, ctx: Arc<Context>) -> anyhow
         .fetch_all(ctx.database.get().await?.deref_mut())
         .await?;
 
-    const CHUNK_SIZE: usize = 100;
-
     let mut users_recalculated = 0;
     let user_count = user_ids.len();
 
-    for user_id_chunk in user_ids.chunks(CHUNK_SIZE).map(|c| c.to_vec()) {
-        let mut futures = Vec::with_capacity(user_id_chunk.len());
+    let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_TASKS));
 
-        for (user_id,) in user_id_chunk {
-            let future = tokio::spawn(recalculate_user(user_id, mode, rx, ctx.clone()));
-            futures.push(future);
-        }
+    let tasks = user_ids.into_iter().map(|(user_id,)| {
+        let semaphore = semaphore.clone();
+        let ctx = ctx.clone();
 
-        futures::future::try_join_all(futures).await?;
+        tokio::spawn(async move {
+            let permit = semaphore.acquire().await?;
 
-        users_recalculated += CHUNK_SIZE;
+            recalculate_user(user_id, mode, rx, ctx).await?;
 
-        if users_recalculated % (CHUNK_SIZE * 10) == 0 {
-            log::info!(
-                users_recalculated = users_recalculated,
-                users_left = (user_count - users_recalculated);
-                "Recalculated users",
-            );
-        }
-    }
+            users_recalculated += MAX_CONCURRENT_TASKS;
+
+            if users_recalculated % (MAX_CONCURRENT_TASKS * 10) == 0 {
+                log::info!(
+                    users_recalculated = users_recalculated,
+                    users_left = (user_count - users_recalculated);
+                    "Recalculated users",
+                );
+            }
+
+            drop(permit);
+
+            Ok::<(), anyhow::Error>(())
+        })
+    });
+
+    futures::future::join_all(tasks).await;
 
     Ok(())
 }
