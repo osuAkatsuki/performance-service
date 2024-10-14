@@ -527,7 +527,37 @@ struct RecalculateContext {
     pub beatmaps: HashMap<i32, Beatmap>,
 }
 
-pub async fn serve(context: Context) -> anyhow::Result<()> {
+struct DeployArgs {
+    modes: Vec<i32>,
+    relax_bits: Vec<i32>,
+    total_pp_only: bool,
+    mods_filter: Option<i32>,
+}
+
+fn deploy_args_from_env() -> anyhow::Result<DeployArgs> {
+    let modes_str = std::env::var("DEPLOY_MODES")?;
+    let relax_bits_str = std::env::var("DEPLOY_RELAX_BITS")?;
+    let total_pp_only_str = std::env::var("DEPLOY_TOTAL_PP_ONLY").unwrap_or("".to_string());
+    let mods_filter_str = std::env::var("DEPLOY_MODS_FILTER").ok();
+
+    Ok(DeployArgs {
+        modes: modes_str
+            .trim()
+            .split(',')
+            .map(|s| s.parse::<i32>().expect("failed to parse mode"))
+            .collect::<Vec<_>>(),
+        relax_bits: relax_bits_str
+            .trim()
+            .split(',')
+            .map(|s| s.parse::<i32>().expect("failed to parse relax bits"))
+            .collect::<Vec<_>>(),
+        total_pp_only: total_pp_only_str.to_lowercase().trim() == "1",
+        mods_filter: mods_filter_str
+            .map(|mods| mods.trim().parse::<i32>().expect("failed to parse mods")),
+    })
+}
+
+fn deploy_args_from_input() -> anyhow::Result<DeployArgs> {
     print!("Enter the modes (comma delimited) to deploy: ");
     std::io::stdout().flush()?;
 
@@ -594,27 +624,48 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
         std::io::stdout().flush()?;
     }
 
+    Ok(DeployArgs {
+        modes,
+        relax_bits,
+        total_pp_only: total_only,
+        mods_filter: mods_value,
+    })
+}
+
+fn retrieve_deploy_args() -> anyhow::Result<DeployArgs> {
+    let env_deploy_args = deploy_args_from_env();
+
+    if let Ok(deploy_args) = env_deploy_args {
+        Ok(deploy_args)
+    } else {
+        deploy_args_from_input()
+    }
+}
+
+pub async fn serve(context: Context) -> anyhow::Result<()> {
+    let deploy_args = retrieve_deploy_args()?;
+
     let recalculate_context = Arc::new(Mutex::new(RecalculateContext {
         beatmaps: HashMap::new(),
     }));
 
     let context_arc = Arc::new(context);
 
-    if !total_only {
-        for mode in &modes {
+    if !deploy_args.total_pp_only {
+        for mode in &deploy_args.modes {
             let mode = mode.clone();
 
             let rx = vec![0, 1, 2].contains(&mode);
             let ap = mode == 0;
 
             if rx || ap {
-                for rx in &relax_bits {
+                for rx in &deploy_args.relax_bits {
                     recalculate_mode_scores(
                         mode,
                         rx.clone(),
                         context_arc.clone(),
                         recalculate_context.clone(),
-                        mods_value,
+                        deploy_args.mods_filter,
                     )
                     .await?;
                 }
@@ -624,21 +675,21 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
                     0,
                     context_arc.clone(),
                     recalculate_context.clone(),
-                    mods_value,
+                    deploy_args.mods_filter,
                 )
                 .await?;
             }
         }
     }
 
-    for mode in &modes {
+    for mode in &deploy_args.modes {
         let mode = mode.clone();
 
         let rx = vec![0, 1, 2].contains(&mode);
         let ap = mode == 0;
 
         if rx || ap {
-            for rx in &relax_bits {
+            for rx in &deploy_args.relax_bits {
                 recalculate_mode_users(mode, rx.clone(), context_arc.clone()).await?;
             }
         } else {
