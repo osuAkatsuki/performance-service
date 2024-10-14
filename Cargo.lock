@@ -111,7 +111,7 @@ dependencies = [
 [[package]]
 name = "akatsuki-pp"
 version = "1.1.1"
-source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=3d5e6ac6b37e63c3fe80ae38b2e40294840c84d7#3d5e6ac6b37e63c3fe80ae38b2e40294840c84d7"
+source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=a9b4aa4da033e1d72b96e35fd8898e32a23d2002#a9b4aa4da033e1d72b96e35fd8898e32a23d2002"
 dependencies = [
  "rosu-map",
  "rosu-mods",
