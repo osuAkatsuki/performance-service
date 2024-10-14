@@ -192,14 +192,6 @@ async fn recalculate_score(
         .execute(ctx.database.get().await?.deref_mut())
         .await?;
 
-    log::info!(
-        score_id = score.id,
-        score_mode = score.play_mode,
-        old_pp = score.pp,
-        new_pp = score.pp;
-        "Recalculated score",
-    );
-
     Ok(())
 }
 
@@ -244,7 +236,12 @@ async fn recalculate_mode_scores(
     .fetch_all(ctx.database.get().await?.deref_mut())
     .await?;
 
-    for score_chunk in scores.chunks(100).map(|c| c.to_vec()) {
+    const CHUNK_SIZE: usize = 100;
+
+    let mut scores_recalculated = 0;
+    let score_count = scores.len();
+
+    for score_chunk in scores.chunks(CHUNK_SIZE).map(|c| c.to_vec()) {
         let mut futures = Vec::new();
 
         for score in score_chunk {
@@ -253,6 +250,16 @@ async fn recalculate_mode_scores(
         }
 
         futures::future::try_join_all(futures).await?;
+
+        scores_recalculated += CHUNK_SIZE;
+
+        if scores_recalculated % (CHUNK_SIZE * 10) == 0 {
+            log::info!(
+                scores_recalculated = scores_recalculated,
+                scores_left = (score_count - scores_recalculated);
+                "Recalculated scores",
+            );
+        }
     }
 
     Ok(())
@@ -502,14 +509,6 @@ async fn recalculate_user(
         .publish("peppy:update_cached_stats", user_id)
         .await?;
 
-    log::info!(
-        user_id = user_id,
-        mode = mode,
-        relax = rx,
-        new_pp = new_pp;
-        "Recalculated user",
-    );
-
     Ok(())
 }
 
@@ -518,7 +517,12 @@ async fn recalculate_mode_users(mode: i32, rx: i32, ctx: Arc<Context>) -> anyhow
         .fetch_all(ctx.database.get().await?.deref_mut())
         .await?;
 
-    for user_id_chunk in user_ids.chunks(100).map(|c| c.to_vec()) {
+    const CHUNK_SIZE: usize = 100;
+
+    let mut users_recalculated = 0;
+    let user_count = user_ids.len();
+
+    for user_id_chunk in user_ids.chunks(CHUNK_SIZE).map(|c| c.to_vec()) {
         let mut futures = Vec::with_capacity(user_id_chunk.len());
 
         for (user_id,) in user_id_chunk {
@@ -527,6 +531,16 @@ async fn recalculate_mode_users(mode: i32, rx: i32, ctx: Arc<Context>) -> anyhow
         }
 
         futures::future::try_join_all(futures).await?;
+
+        users_recalculated += CHUNK_SIZE;
+
+        if users_recalculated % (CHUNK_SIZE * 10) == 0 {
+            log::info!(
+                users_recalculated = users_recalculated,
+                users_left = (user_count - users_recalculated);
+                "Recalculated users",
+            );
+        }
     }
 
     Ok(())
