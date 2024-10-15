@@ -2,10 +2,12 @@ use crate::{context::Context, models::score::RippleScore, usecases};
 use akatsuki_pp_rs::model::mode::GameMode;
 use akatsuki_pp_rs::Beatmap;
 use anyhow::anyhow;
+use futures::stream::FuturesUnordered;
+use futures::StreamExt;
 use redis::AsyncCommands;
 use std::io::Write;
-use std::{collections::HashMap, ops::DerefMut, sync::Arc, time::SystemTime};
-use tokio::sync::Mutex;
+use std::{ops::DerefMut, sync::Arc, time::SystemTime};
+use tokio::sync::Semaphore;
 
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct CalculateRequest {
@@ -37,29 +39,10 @@ const AP: i32 = 1 << 13;
 async fn calculate_special_pp(
     request: &CalculateRequest,
     context: Arc<Context>,
-    recalc_ctx: &Arc<Mutex<RecalculateContext>>,
 ) -> anyhow::Result<CalculateResponse> {
-    let mut recalc_mutex = recalc_ctx.lock().await;
-
-    let beatmap = if recalc_mutex.beatmaps.contains_key(&request.beatmap_id) {
-        recalc_mutex
-            .beatmaps
-            .get(&request.beatmap_id)
-            .unwrap()
-            .clone()
-    } else {
-        let beatmap_bytes =
-            usecases::beatmaps::fetch_beatmap_osu_file(request.beatmap_id, context.clone()).await?;
-        let beatmap = Beatmap::from_bytes(&beatmap_bytes)?;
-
-        recalc_mutex
-            .beatmaps
-            .insert(request.beatmap_id, beatmap.clone());
-
-        beatmap
-    };
-
-    drop(recalc_mutex);
+    let beatmap_bytes =
+        usecases::beatmaps::fetch_beatmap_osu_file(request.beatmap_id, context.clone()).await?;
+    let beatmap = Beatmap::from_bytes(&beatmap_bytes)?;
 
     let result = akatsuki_pp_rs::osu_2019::OsuPP::new(&beatmap)
         .mods(request.mods as u32)
@@ -86,29 +69,10 @@ async fn calculate_special_pp(
 async fn calculate_rosu_pp(
     request: &CalculateRequest,
     context: Arc<Context>,
-    recalc_ctx: &Arc<Mutex<RecalculateContext>>,
 ) -> anyhow::Result<CalculateResponse> {
-    let mut recalc_mutex = recalc_ctx.lock().await;
-
-    let beatmap = if recalc_mutex.beatmaps.contains_key(&request.beatmap_id) {
-        recalc_mutex
-            .beatmaps
-            .get(&request.beatmap_id)
-            .unwrap()
-            .clone()
-    } else {
-        let beatmap_bytes =
-            usecases::beatmaps::fetch_beatmap_osu_file(request.beatmap_id, context.clone()).await?;
-        let beatmap = Beatmap::from_bytes(&beatmap_bytes)?;
-
-        recalc_mutex
-            .beatmaps
-            .insert(request.beatmap_id, beatmap.clone());
-
-        beatmap
-    };
-
-    drop(recalc_mutex);
+    let beatmap_bytes =
+        usecases::beatmaps::fetch_beatmap_osu_file(request.beatmap_id, context.clone()).await?;
+    let beatmap = Beatmap::from_bytes(&beatmap_bytes)?;
 
     let result = beatmap
         .performance()
@@ -148,11 +112,7 @@ async fn calculate_rosu_pp(
     Ok(CalculateResponse { stars, pp })
 }
 
-async fn recalculate_score(
-    score: RippleScore,
-    ctx: Arc<Context>,
-    recalc_ctx: Arc<Mutex<RecalculateContext>>,
-) -> anyhow::Result<()> {
+async fn recalculate_score(score: RippleScore, ctx: Arc<Context>) -> anyhow::Result<()> {
     let request = CalculateRequest {
         beatmap_id: score.beatmap_id,
         beatmap_md5: score.beatmap_md5,
@@ -166,9 +126,9 @@ async fn recalculate_score(
     };
 
     let response = if score.mods & RX > 0 && score.play_mode == 0 {
-        calculate_special_pp(&request, ctx.clone(), &recalc_ctx).await?
+        calculate_special_pp(&request, ctx.clone()).await?
     } else {
-        calculate_rosu_pp(&request, ctx.clone(), &recalc_ctx).await?
+        calculate_rosu_pp(&request, ctx.clone()).await?
     };
 
     let rx = if score.mods & RX > 0 {
@@ -195,11 +155,13 @@ async fn recalculate_score(
     Ok(())
 }
 
+const MAX_CONCURRENT_TASKS: usize = 100;
+const BATCH_SIZE: u32 = 1000;
+
 async fn recalculate_mode_scores(
     mode: i32,
     rx: i32,
     ctx: Arc<Context>,
-    recalc_ctx: Arc<Mutex<RecalculateContext>>,
     mods_value: Option<i32>,
 ) -> anyhow::Result<()> {
     let scores_table = match rx {
@@ -214,52 +176,70 @@ async fn recalculate_mode_scores(
         None => "".to_string(),
     };
 
-    let scores: Vec<RippleScore> = sqlx::query_as(
-        &format!(
-            "SELECT s.id, s.beatmap_md5, s.userid, s.score, s.max_combo, s.full_combo, s.mods, s.300_count,
-            s.100_count, s.50_count, s.katus_count, s.gekis_count, s.misses_count, s.time, s.play_mode, s.completed,
-            s.accuracy, s.pp, s.checksum, s.patcher, s.pinned, b.beatmap_id, b.beatmapset_id, b.song_name
-            FROM {} s
-            INNER JOIN
-                beatmaps b
-                USING(beatmap_md5)
-            WHERE
-                completed IN (2, 3)
-                AND play_mode = ?
-                {}
-            ORDER BY pp DESC",
-            scores_table,
-            mods_query_str,
+    let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_TASKS));
+
+    let mut offset: u32 = 0;
+
+    loop {
+        let scores: Vec<RippleScore> = sqlx::query_as(
+            &format!(
+                "SELECT s.id, s.beatmap_md5, s.userid, s.score, s.max_combo, s.full_combo, s.mods, s.300_count,
+                s.100_count, s.50_count, s.katus_count, s.gekis_count, s.misses_count, s.time, s.play_mode, s.completed,
+                s.accuracy, s.pp, s.checksum, s.patcher, s.pinned, b.beatmap_id, b.beatmapset_id, b.song_name
+                FROM {} s
+                INNER JOIN
+                    beatmaps b
+                    USING(beatmap_md5)
+                WHERE
+                    completed IN (2, 3)
+                    AND play_mode = ?
+                    {}
+                ORDER BY pp DESC
+                LIMIT ? OFFSET ?",
+                scores_table,
+                mods_query_str,
+            )
         )
-    )
-    .bind(mode)
-    .fetch_all(ctx.database.get().await?.deref_mut())
-    .await?;
+        .bind(mode)
+        .bind(BATCH_SIZE as u32)
+        .bind(offset)
+        .fetch_all(ctx.database.get().await?.deref_mut())
+        .await?;
 
-    const CHUNK_SIZE: usize = 100;
-
-    let mut scores_recalculated = 0;
-    let score_count = scores.len();
-
-    for score_chunk in scores.chunks(CHUNK_SIZE).map(|c| c.to_vec()) {
-        let mut futures = Vec::new();
-
-        for score in score_chunk {
-            let future = tokio::spawn(recalculate_score(score, ctx.clone(), recalc_ctx.clone()));
-            futures.push(future);
+        if scores.is_empty() {
+            break;
         }
 
-        futures::future::try_join_all(futures).await?;
+        let mut futures = FuturesUnordered::new();
 
-        scores_recalculated += CHUNK_SIZE;
+        for score in scores {
+            let semaphore = semaphore.clone();
+            let ctx = ctx.clone();
 
-        if scores_recalculated % (CHUNK_SIZE * 10) == 0 {
-            log::info!(
-                scores_recalculated = scores_recalculated,
-                scores_left = (score_count - scores_recalculated);
-                "Recalculated scores",
-            );
+            let permit = semaphore.acquire_owned().await?;
+
+            futures.push(tokio::spawn(async move {
+                recalculate_score(score, ctx).await?;
+                drop(permit);
+                Ok::<(), anyhow::Error>(())
+            }))
         }
+
+        while let Some(result) = futures.next().await {
+            if let Err(e) = result {
+                log::error!(
+                    error = e.to_string();
+                    "Processing score failed",
+                );
+            }
+        }
+
+        offset += BATCH_SIZE;
+
+        log::info!(
+            scores_recalculated = offset;
+            "Processed batch of scores",
+        );
     }
 
     Ok(())
@@ -352,22 +332,8 @@ async fn recalculate_statuses(
         .fetch_all(ctx.database.get().await?.deref_mut())
         .await?;
 
-    for beatmap_chunk in beatmap_md5s.chunks(100).map(|c| c.to_vec()) {
-        let mut futures = Vec::with_capacity(beatmap_chunk.len());
-
-        for (beatmap_md5,) in beatmap_chunk {
-            let future = tokio::spawn(recalculate_status(
-                user_id,
-                mode,
-                rx,
-                beatmap_md5,
-                ctx.clone(),
-            ));
-
-            futures.push(future);
-        }
-
-        futures::future::try_join_all(futures).await?;
+    for (beatmap_md5,) in beatmap_md5s {
+        recalculate_status(user_id, mode, rx, beatmap_md5, ctx.clone()).await?;
     }
 
     Ok(())
@@ -517,37 +483,44 @@ async fn recalculate_mode_users(mode: i32, rx: i32, ctx: Arc<Context>) -> anyhow
         .fetch_all(ctx.database.get().await?.deref_mut())
         .await?;
 
-    const CHUNK_SIZE: usize = 100;
+    let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_TASKS));
 
     let mut users_recalculated = 0;
-    let user_count = user_ids.len();
 
-    for user_id_chunk in user_ids.chunks(CHUNK_SIZE).map(|c| c.to_vec()) {
-        let mut futures = Vec::with_capacity(user_id_chunk.len());
+    for user_id_chunk in user_ids.chunks(BATCH_SIZE as usize).map(|c| c.to_vec()) {
+        let mut futures = FuturesUnordered::new();
 
         for (user_id,) in user_id_chunk {
-            let future = tokio::spawn(recalculate_user(user_id, mode, rx, ctx.clone()));
-            futures.push(future);
+            let semaphore = semaphore.clone();
+            let ctx = ctx.clone();
+
+            let permit = semaphore.acquire_owned().await?;
+
+            futures.push(tokio::spawn(async move {
+                recalculate_user(user_id, mode, rx, ctx).await?;
+                drop(permit);
+                Ok::<(), anyhow::Error>(())
+            }))
         }
 
-        futures::future::try_join_all(futures).await?;
-
-        users_recalculated += CHUNK_SIZE;
-
-        if users_recalculated % (CHUNK_SIZE * 10) == 0 {
-            log::info!(
-                users_recalculated = users_recalculated,
-                users_left = (user_count - users_recalculated);
-                "Recalculated users",
-            );
+        while let Some(result) = futures.next().await {
+            if let Err(e) = result {
+                log::error!(
+                    error = e.to_string();
+                    "Processing user failed",
+                );
+            }
         }
+
+        users_recalculated += BATCH_SIZE;
+
+        log::info!(
+            users_recalculated = users_recalculated;
+            "Processed users",
+        );
     }
 
     Ok(())
-}
-
-struct RecalculateContext {
-    pub beatmaps: HashMap<i32, Beatmap>,
 }
 
 struct DeployArgs {
@@ -668,10 +641,6 @@ fn retrieve_deploy_args() -> anyhow::Result<DeployArgs> {
 pub async fn serve(context: Context) -> anyhow::Result<()> {
     let deploy_args = retrieve_deploy_args()?;
 
-    let recalculate_context = Arc::new(Mutex::new(RecalculateContext {
-        beatmaps: HashMap::new(),
-    }));
-
     let context_arc = Arc::new(context);
 
     if !deploy_args.total_pp_only {
@@ -687,20 +656,13 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
                         mode,
                         rx.clone(),
                         context_arc.clone(),
-                        recalculate_context.clone(),
                         deploy_args.mods_filter,
                     )
                     .await?;
                 }
             } else {
-                recalculate_mode_scores(
-                    mode,
-                    0,
-                    context_arc.clone(),
-                    recalculate_context.clone(),
-                    deploy_args.mods_filter,
-                )
-                .await?;
+                recalculate_mode_scores(mode, 0, context_arc.clone(), deploy_args.mods_filter)
+                    .await?;
             }
         }
     }
