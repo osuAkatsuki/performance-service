@@ -6,7 +6,6 @@ use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use redis::AsyncCommands;
 use std::io::Write;
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::{collections::HashMap, ops::DerefMut, sync::Arc, time::SystemTime};
 use tokio::sync::{Mutex, Semaphore};
 
