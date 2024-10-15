@@ -6,8 +6,8 @@ use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use redis::AsyncCommands;
 use std::io::Write;
-use std::{collections::HashMap, ops::DerefMut, sync::Arc, time::SystemTime};
-use tokio::sync::{Mutex, Semaphore};
+use std::{ops::DerefMut, sync::Arc, time::SystemTime};
+use tokio::sync::Semaphore;
 
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct CalculateRequest {
@@ -39,29 +39,10 @@ const AP: i32 = 1 << 13;
 async fn calculate_special_pp(
     request: &CalculateRequest,
     context: Arc<Context>,
-    recalc_ctx: &Arc<Mutex<RecalculateContext>>,
 ) -> anyhow::Result<CalculateResponse> {
-    let mut recalc_mutex = recalc_ctx.lock().await;
-
-    let beatmap = if recalc_mutex.beatmaps.contains_key(&request.beatmap_id) {
-        recalc_mutex
-            .beatmaps
-            .get(&request.beatmap_id)
-            .unwrap()
-            .clone()
-    } else {
-        let beatmap_bytes =
-            usecases::beatmaps::fetch_beatmap_osu_file(request.beatmap_id, context.clone()).await?;
-        let beatmap = Beatmap::from_bytes(&beatmap_bytes)?;
-
-        recalc_mutex
-            .beatmaps
-            .insert(request.beatmap_id, beatmap.clone());
-
-        beatmap
-    };
-
-    drop(recalc_mutex);
+    let beatmap_bytes =
+        usecases::beatmaps::fetch_beatmap_osu_file(request.beatmap_id, context.clone()).await?;
+    let beatmap = Beatmap::from_bytes(&beatmap_bytes)?;
 
     let result = akatsuki_pp_rs::osu_2019::OsuPP::new(&beatmap)
         .mods(request.mods as u32)
@@ -88,29 +69,10 @@ async fn calculate_special_pp(
 async fn calculate_rosu_pp(
     request: &CalculateRequest,
     context: Arc<Context>,
-    recalc_ctx: &Arc<Mutex<RecalculateContext>>,
 ) -> anyhow::Result<CalculateResponse> {
-    let mut recalc_mutex = recalc_ctx.lock().await;
-
-    let beatmap = if recalc_mutex.beatmaps.contains_key(&request.beatmap_id) {
-        recalc_mutex
-            .beatmaps
-            .get(&request.beatmap_id)
-            .unwrap()
-            .clone()
-    } else {
-        let beatmap_bytes =
-            usecases::beatmaps::fetch_beatmap_osu_file(request.beatmap_id, context.clone()).await?;
-        let beatmap = Beatmap::from_bytes(&beatmap_bytes)?;
-
-        recalc_mutex
-            .beatmaps
-            .insert(request.beatmap_id, beatmap.clone());
-
-        beatmap
-    };
-
-    drop(recalc_mutex);
+    let beatmap_bytes =
+        usecases::beatmaps::fetch_beatmap_osu_file(request.beatmap_id, context.clone()).await?;
+    let beatmap = Beatmap::from_bytes(&beatmap_bytes)?;
 
     let result = beatmap
         .performance()
@@ -150,11 +112,7 @@ async fn calculate_rosu_pp(
     Ok(CalculateResponse { stars, pp })
 }
 
-async fn recalculate_score(
-    score: RippleScore,
-    ctx: Arc<Context>,
-    recalc_ctx: Arc<Mutex<RecalculateContext>>,
-) -> anyhow::Result<()> {
+async fn recalculate_score(score: RippleScore, ctx: Arc<Context>) -> anyhow::Result<()> {
     let request = CalculateRequest {
         beatmap_id: score.beatmap_id,
         beatmap_md5: score.beatmap_md5,
@@ -168,9 +126,9 @@ async fn recalculate_score(
     };
 
     let response = if score.mods & RX > 0 && score.play_mode == 0 {
-        calculate_special_pp(&request, ctx.clone(), &recalc_ctx).await?
+        calculate_special_pp(&request, ctx.clone()).await?
     } else {
-        calculate_rosu_pp(&request, ctx.clone(), &recalc_ctx).await?
+        calculate_rosu_pp(&request, ctx.clone()).await?
     };
 
     let rx = if score.mods & RX > 0 {
@@ -204,7 +162,6 @@ async fn recalculate_mode_scores(
     mode: i32,
     rx: i32,
     ctx: Arc<Context>,
-    recalc_ctx: Arc<Mutex<RecalculateContext>>,
     mods_value: Option<i32>,
 ) -> anyhow::Result<()> {
     let scores_table = match rx {
@@ -258,12 +215,11 @@ async fn recalculate_mode_scores(
         for score in scores {
             let semaphore = semaphore.clone();
             let ctx = ctx.clone();
-            let recalc_ctx = recalc_ctx.clone();
 
             let permit = semaphore.acquire_owned().await?;
 
             futures.push(tokio::spawn(async move {
-                recalculate_score(score, ctx, recalc_ctx).await?;
+                recalculate_score(score, ctx).await?;
                 drop(permit);
                 Ok::<(), anyhow::Error>(())
             }))
@@ -567,10 +523,6 @@ async fn recalculate_mode_users(mode: i32, rx: i32, ctx: Arc<Context>) -> anyhow
     Ok(())
 }
 
-struct RecalculateContext {
-    pub beatmaps: HashMap<i32, Beatmap>,
-}
-
 struct DeployArgs {
     modes: Vec<i32>,
     relax_bits: Vec<i32>,
@@ -689,10 +641,6 @@ fn retrieve_deploy_args() -> anyhow::Result<DeployArgs> {
 pub async fn serve(context: Context) -> anyhow::Result<()> {
     let deploy_args = retrieve_deploy_args()?;
 
-    let recalculate_context = Arc::new(Mutex::new(RecalculateContext {
-        beatmaps: HashMap::new(),
-    }));
-
     let context_arc = Arc::new(context);
 
     if !deploy_args.total_pp_only {
@@ -708,20 +656,13 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
                         mode,
                         rx.clone(),
                         context_arc.clone(),
-                        recalculate_context.clone(),
                         deploy_args.mods_filter,
                     )
                     .await?;
                 }
             } else {
-                recalculate_mode_scores(
-                    mode,
-                    0,
-                    context_arc.clone(),
-                    recalculate_context.clone(),
-                    deploy_args.mods_filter,
-                )
-                .await?;
+                recalculate_mode_scores(mode, 0, context_arc.clone(), deploy_args.mods_filter)
+                    .await?;
             }
         }
     }
