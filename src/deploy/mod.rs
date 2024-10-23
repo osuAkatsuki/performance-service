@@ -44,7 +44,7 @@ async fn calculate_special_pp(
         usecases::beatmaps::fetch_beatmap_osu_file(request.beatmap_id, context.clone()).await?;
     let beatmap = Beatmap::from_bytes(&beatmap_bytes)?;
 
-    let result = akatsuki_pp_rs::osu_2019::OsuPP::new(&beatmap)
+    let result = akatsuki_pp_rs::osu_2019::OsuPP::from_map(&beatmap)
         .mods(request.mods as u32)
         .combo(request.max_combo as u32)
         .misses(request.miss_count as u32)
