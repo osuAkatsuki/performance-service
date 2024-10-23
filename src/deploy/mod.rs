@@ -253,6 +253,9 @@ async fn recalculate_mode_scores(
         "Starting beatmap recalculation"
     );
 
+    let mut beatmaps_processed = 0;
+    let total_beatmaps = beatmap_md5s.len();
+
     for (beatmap_md5,) in beatmap_md5s {
         let semaphore = semaphore.clone();
         let ctx = ctx.clone();
@@ -262,7 +265,20 @@ async fn recalculate_mode_scores(
 
         futures.push(tokio::spawn(async move {
             recalculate_beatmap(beatmap_md5, scores_table, mods_query_str, mode, rx, ctx).await?;
+            beatmaps_processed += 1;
+
             drop(permit);
+
+            if beatmaps_processed % 1000 == 0 {
+                log::info!(
+                    beatmaps_left = total_beatmaps - beatmaps_processed as usize,
+                    mode = mode,
+                    rx = rx,
+                    beatmaps_processed = beatmaps_processed;
+                    "Beatmap recalculation progress",
+                );
+            }
+
             Ok::<(), anyhow::Error>(())
         }))
     }
@@ -271,7 +287,7 @@ async fn recalculate_mode_scores(
         if let Err(e) = result {
             log::error!(
                 error = e.to_string();
-                "Processing beatmap failed",
+                "Recalculating beatmap failed",
             );
         }
     }
