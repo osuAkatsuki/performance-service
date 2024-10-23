@@ -1,31 +1,27 @@
-use crate::{context::Context, models::score::RippleScore, usecases};
+use crate::{context::Context, usecases};
 use akatsuki_pp_rs::model::mode::GameMode;
 use akatsuki_pp_rs::Beatmap;
 use anyhow::anyhow;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use redis::AsyncCommands;
+use std::collections::HashMap;
 use std::io::Write;
 use std::{ops::DerefMut, sync::Arc, time::SystemTime};
 use tokio::sync::Semaphore;
 
-#[derive(serde::Serialize, serde::Deserialize)]
-pub struct CalculateRequest {
-    pub beatmap_id: i32,
-    pub beatmap_md5: String,
-    pub mode: i32,
+#[derive(Clone, sqlx::FromRow)]
+struct LightweightScore {
+    pub id: i64,
     pub mods: i32,
     pub max_combo: i32,
-    pub count_300: i32,
-    pub count_100: i32,
-    pub count_50: i32,
-    pub miss_count: i32,
-}
-
-#[derive(serde::Serialize, serde::Deserialize)]
-pub struct CalculateResponse {
-    pub stars: f32,
+    pub play_mode: i32,
+    pub beatmap_id: i32,
     pub pp: f32,
+    pub accuracy: f32,
+
+    #[sqlx(rename = "misses_count")]
+    pub count_misses: i32,
 }
 
 fn round(x: f32, decimals: u32) -> f32 {
@@ -33,50 +29,67 @@ fn round(x: f32, decimals: u32) -> f32 {
     (x * y).round() / y
 }
 
-const RX: i32 = 1 << 7;
-const AP: i32 = 1 << 13;
+const MAX_CONCURRENT_TASKS: usize = 100;
+const BATCH_SIZE: u32 = 1000;
 
-async fn calculate_special_pp(
-    request: &CalculateRequest,
-    context: Arc<Context>,
-) -> anyhow::Result<CalculateResponse> {
-    let beatmap_bytes =
-        usecases::beatmaps::fetch_beatmap_osu_file(request.beatmap_id, context.clone()).await?;
-    let beatmap = Beatmap::from_bytes(&beatmap_bytes)?;
+fn group_scores_by_mods(vec: Vec<LightweightScore>) -> HashMap<i32, Vec<LightweightScore>> {
+    let mut grouped_map = HashMap::new();
 
-    let result = akatsuki_pp_rs::osu_2019::OsuPP::from_map(&beatmap)
-        .mods(request.mods as u32)
-        .combo(request.max_combo as u32)
-        .misses(request.miss_count as u32)
-        .n300(request.count_300 as u32)
-        .n100(request.count_100 as u32)
-        .n50(request.count_50 as u32)
-        .calculate();
-
-    let mut pp = round(result.pp as f32, 2);
-    if pp.is_infinite() || pp.is_nan() {
-        pp = 0.0;
+    for item in vec {
+        grouped_map
+            .entry(item.mods)
+            .or_insert_with(Vec::new)
+            .push(item);
     }
 
-    let mut stars = round(result.difficulty.stars as f32, 2);
-    if stars.is_infinite() || stars.is_nan() {
-        stars = 0.0;
-    }
-
-    Ok(CalculateResponse { stars, pp })
+    grouped_map
 }
 
-async fn calculate_rosu_pp(
-    request: &CalculateRequest,
-    context: Arc<Context>,
-) -> anyhow::Result<CalculateResponse> {
-    let beatmap_bytes =
-        usecases::beatmaps::fetch_beatmap_osu_file(request.beatmap_id, context.clone()).await?;
-    let beatmap = Beatmap::from_bytes(&beatmap_bytes)?;
+async fn recalculate_relax_scores(
+    scores: Vec<LightweightScore>,
+    mods: i32,
+    scores_table: &str,
+    beatmap: &Beatmap,
+    ctx: Arc<Context>,
+) -> anyhow::Result<()> {
+    let difficulty_attributes =
+        akatsuki_pp_rs::osu_2019::stars::stars(&beatmap, (mods as u32).into());
+
+    for score in scores {
+        let result =
+            akatsuki_pp_rs::osu_2019::OsuPP::from_attributes(difficulty_attributes.clone())
+                .mods(score.mods as u32)
+                .combo(score.max_combo as u32)
+                .misses(score.count_misses as u32)
+                .accuracy(score.accuracy)
+                .calculate();
+
+        let mut pp = round(result.pp as f32, 2);
+        if pp.is_infinite() || pp.is_nan() {
+            pp = 0.0;
+        }
+
+        sqlx::query(&format!("UPDATE {} SET pp = ? WHERE id = ?", scores_table))
+            .bind(pp)
+            .bind(score.id)
+            .execute(ctx.database.get().await?.deref_mut())
+            .await?;
+    }
+
+    Ok(())
+}
+
+async fn recalculate_scores(
+    mut scores: Vec<LightweightScore>,
+    scores_table: &str,
+    beatmap: &Beatmap,
+    ctx: Arc<Context>,
+) -> anyhow::Result<()> {
+    let first_score = scores[0].clone();
 
     let result = beatmap
         .performance()
-        .try_mode(match request.mode {
+        .try_mode(match first_score.play_mode {
             0 => GameMode::Osu,
             1 => GameMode::Taiko,
             2 => GameMode::Catch,
@@ -86,77 +99,122 @@ async fn calculate_rosu_pp(
         .map_err(|_| {
             anyhow!(
                 "failed to set mode {} for beatmap {}",
-                request.mode,
-                request.beatmap_id
+                first_score.play_mode,
+                first_score.beatmap_id
             )
         })?
-        .mods(request.mods as u32)
+        .mods(first_score.mods as u32)
         .lazer(false)
-        .combo(request.max_combo as u32)
-        .n300(request.count_300 as u32)
-        .n100(request.count_100 as u32)
-        .n50(request.count_50 as u32)
-        .misses(request.miss_count as u32)
+        .combo(first_score.max_combo as u32)
+        .misses(first_score.count_misses as u32)
+        .accuracy(first_score.accuracy as f64)
         .calculate();
 
-    let mut pp = round(result.pp() as f32, 2);
-    if pp.is_infinite() || pp.is_nan() {
-        pp = 0.0;
-    }
-
-    let mut stars = round(result.stars() as f32, 2);
-    if stars.is_infinite() || stars.is_nan() {
-        stars = 0.0;
-    }
-
-    Ok(CalculateResponse { stars, pp })
-}
-
-async fn recalculate_score(score: RippleScore, ctx: Arc<Context>) -> anyhow::Result<()> {
-    let request = CalculateRequest {
-        beatmap_id: score.beatmap_id,
-        beatmap_md5: score.beatmap_md5,
-        mode: score.play_mode,
-        mods: score.mods,
-        max_combo: score.max_combo,
-        count_300: score.count_300,
-        count_100: score.count_100,
-        count_50: score.count_50,
-        miss_count: score.count_misses,
-    };
-
-    let response = if score.mods & RX > 0 && score.play_mode == 0 {
-        calculate_special_pp(&request, ctx.clone()).await?
-    } else {
-        calculate_rosu_pp(&request, ctx.clone()).await?
-    };
-
-    let rx = if score.mods & RX > 0 {
-        1
-    } else if score.mods & AP > 0 {
-        2
-    } else {
-        0
-    };
-
-    let scores_table = match rx {
-        0 => "scores",
-        1 => "scores_relax",
-        2 => "scores_ap",
-        _ => unreachable!(),
-    };
-
     sqlx::query(&format!("UPDATE {} SET pp = ? WHERE id = ?", scores_table))
-        .bind(response.pp)
-        .bind(score.id)
+        .bind(result.pp())
+        .bind(first_score.id)
         .execute(ctx.database.get().await?.deref_mut())
         .await?;
+
+    let difficulty_attributes = result.difficulty_attributes();
+
+    for score in &mut scores[1..] {
+        let result = difficulty_attributes
+            .clone()
+            .performance()
+            .try_mode(match score.play_mode {
+                0 => GameMode::Osu,
+                1 => GameMode::Taiko,
+                2 => GameMode::Catch,
+                3 => GameMode::Mania,
+                _ => unreachable!(),
+            })
+            .map_err(|_| {
+                anyhow!(
+                    "failed to set mode {} for beatmap {}",
+                    score.play_mode,
+                    score.beatmap_id
+                )
+            })?
+            .mods(score.mods as u32)
+            .lazer(false)
+            .combo(score.max_combo as u32)
+            .misses(score.count_misses as u32)
+            .accuracy(score.accuracy as f64)
+            .calculate();
+
+        let mut pp = round(result.pp() as f32, 2);
+        if pp.is_infinite() || pp.is_nan() {
+            pp = 0.0;
+        }
+
+        sqlx::query(&format!("UPDATE {} SET pp = ? WHERE id = ?", scores_table))
+            .bind(pp)
+            .bind(score.id)
+            .execute(ctx.database.get().await?.deref_mut())
+            .await?;
+    }
 
     Ok(())
 }
 
-const MAX_CONCURRENT_TASKS: usize = 100;
-const BATCH_SIZE: u32 = 1000;
+async fn recalculate_beatmap(
+    beatmap_md5: String,
+    scores_table: &str,
+    mods_query_str: String,
+    mode: i32,
+    rx: i32,
+    ctx: Arc<Context>,
+) -> anyhow::Result<()> {
+    let scores: Vec<LightweightScore> = sqlx::query_as(&format!(
+        "SELECT s.id, s.mods, s.max_combo, s.play_mode, b.beatmap_id, s.pp, s.accuracy, s.misses_count
+        FROM {} s
+        INNER JOIN
+            beatmaps b
+            USING(beatmap_md5)
+        WHERE
+            completed IN (2, 3)
+            AND play_mode = ?
+            AND s.beatmap_md5 = ?
+            {}
+        ORDER BY pp DESC",
+        scores_table, mods_query_str,
+    ))
+    .bind(mode)
+    .bind(beatmap_md5)
+    .fetch_all(ctx.database.get().await?.deref_mut())
+    .await?;
+
+    if scores.is_empty() {
+        return Ok(());
+    }
+
+    let base_score = scores[0].clone();
+
+    let grouped_scores = group_scores_by_mods(scores);
+
+    let beatmap_bytes =
+        usecases::beatmaps::fetch_beatmap_osu_file(base_score.beatmap_id, ctx.clone()).await?;
+
+    let beatmap = Beatmap::from_bytes(&beatmap_bytes)?;
+
+    for (mods, mod_scores) in grouped_scores {
+        if mode == 0 && rx == 1 {
+            recalculate_relax_scores(mod_scores, mods, scores_table, &beatmap, ctx.clone()).await?;
+        } else {
+            recalculate_scores(mod_scores, scores_table, &beatmap, ctx.clone()).await?;
+        }
+    }
+
+    log::info!(
+        beatmap_id = base_score.beatmap_id,
+        mode = mode,
+        rx = rx;
+        "Recalculated beatmap"
+    );
+
+    Ok(())
+}
 
 async fn recalculate_mode_scores(
     mode: i32,
@@ -176,76 +234,58 @@ async fn recalculate_mode_scores(
         None => "".to_string(),
     };
 
+    let beatmap_md5s: Vec<(String,)> = sqlx::query_as(&format!(
+        "SELECT DISTINCT beatmap_md5 FROM {} WHERE completed IN (2, 3) AND play_mode = ? {}",
+        scores_table, mods_query_str,
+    ))
+    .bind(mode)
+    .fetch_all(ctx.database.get().await?.deref_mut())
+    .await?;
+
     let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_TASKS));
 
-    let mut offset: u32 = 0;
+    let mut futures = FuturesUnordered::new();
 
-    loop {
-        let scores: Vec<RippleScore> = sqlx::query_as(
-            &format!(
-                "SELECT s.id, s.beatmap_md5, s.userid, s.score, s.max_combo, s.full_combo, s.mods, s.300_count,
-                s.100_count, s.50_count, s.katus_count, s.gekis_count, s.misses_count, s.time, s.play_mode, s.completed,
-                s.accuracy, s.pp, s.checksum, s.patcher, s.pinned, b.beatmap_id, b.beatmapset_id, b.song_name
-                FROM {} s
-                INNER JOIN
-                    beatmaps b
-                    USING(beatmap_md5)
-                WHERE
-                    completed IN (2, 3)
-                    AND play_mode = ?
-                    {}
-                ORDER BY pp DESC
-                LIMIT ? OFFSET ?",
-                scores_table,
-                mods_query_str,
-            )
-        )
-        .bind(mode)
-        .bind(BATCH_SIZE as u32)
-        .bind(offset)
-        .fetch_all(ctx.database.get().await?.deref_mut())
-        .await?;
+    log::info!(
+        beatmaps = beatmap_md5s.len(),
+        mode = mode,
+        rx = rx;
+        "Starting beatmap recalculation"
+    );
 
-        if scores.is_empty() {
-            break;
-        }
+    for (beatmap_md5,) in beatmap_md5s {
+        let semaphore = semaphore.clone();
+        let ctx = ctx.clone();
+        let mods_query_str = mods_query_str.clone();
 
-        let mut futures = FuturesUnordered::new();
+        let permit = semaphore.acquire_owned().await?;
 
-        for score in scores {
-            let semaphore = semaphore.clone();
-            let ctx = ctx.clone();
-
-            let permit = semaphore.acquire_owned().await?;
-
-            futures.push(tokio::spawn(async move {
-                recalculate_score(score, ctx).await?;
-                drop(permit);
-                Ok::<(), anyhow::Error>(())
-            }))
-        }
-
-        while let Some(result) = futures.next().await {
-            if let Err(e) = result {
-                log::error!(
-                    error = e.to_string();
-                    "Processing score failed",
-                );
-            }
-        }
-
-        offset += BATCH_SIZE;
-
-        log::info!(
-            scores_recalculated = offset;
-            "Processed batch of scores",
-        );
+        futures.push(tokio::spawn(async move {
+            recalculate_beatmap(beatmap_md5, scores_table, mods_query_str, mode, rx, ctx).await?;
+            drop(permit);
+            Ok::<(), anyhow::Error>(())
+        }))
     }
+
+    while let Some(result) = futures.next().await {
+        if let Err(e) = result {
+            log::error!(
+                error = e.to_string();
+                "Processing beatmap failed",
+            );
+        }
+    }
+
+    log::info!(
+        mode = mode,
+        rx = rx;
+        "Beatmap recalculation finished"
+    );
 
     Ok(())
 }
 
-fn calculate_new_pp(scores: &Vec<RippleScore>, score_count: i32) -> i32 {
+fn calculate_new_pp(scores: &Vec<LightweightScore>, score_count: i32) -> i32 {
     let mut total_pp = 0.0;
 
     for (idx, score) in scores.iter().enumerate() {
@@ -354,11 +394,9 @@ async fn recalculate_user(
         _ => unreachable!(),
     };
 
-    let scores: Vec<RippleScore> = sqlx::query_as(
+    let scores: Vec<LightweightScore> = sqlx::query_as(
         &format!(
-            "SELECT s.id, s.beatmap_md5, s.userid, s.score, s.max_combo, s.full_combo, s.mods, s.300_count,
-            s.100_count, s.50_count, s.katus_count, s.gekis_count, s.misses_count, s.time, s.play_mode, s.completed,
-            s.accuracy, s.pp, s.checksum, s.patcher, s.pinned, b.beatmap_id, b.beatmapset_id, b.song_name
+            "SELECT s.id, s.mods, s.max_combo, s.play_mode, b.beatmap_id, s.pp, s.accuracy, s.misses_count
             FROM {} s
             INNER JOIN
                 beatmaps b
@@ -515,6 +553,9 @@ async fn recalculate_mode_users(mode: i32, rx: i32, ctx: Arc<Context>) -> anyhow
         users_recalculated += BATCH_SIZE;
 
         log::info!(
+            users_left = user_ids.len() - users_recalculated as usize,
+            mode = mode,
+            rx = rx,
             users_recalculated = users_recalculated;
             "Processed users",
         );
