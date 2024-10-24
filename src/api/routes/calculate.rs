@@ -48,7 +48,7 @@ async fn calculate_relax_pp(
         usecases::beatmaps::fetch_beatmap_osu_file(request.beatmap_id, context).await?;
     let beatmap = Beatmap::from_bytes(&beatmap_bytes)?;
 
-    let mut calculate = akatsuki_pp_rs::osu_2019::OsuPP::new(&beatmap)
+    let mut calculate = akatsuki_pp_rs::osu_2019::OsuPP::from_map(&beatmap)
         .mods(request.mods as u32)
         .combo(request.max_combo as u32);
 
