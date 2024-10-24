@@ -190,6 +190,7 @@ async fn recalculate_beatmap(
     }
 
     let base_score = scores[0].clone();
+    let score_count = scores.len();
 
     let grouped_scores = group_scores_by_mods(scores);
 
@@ -208,6 +209,7 @@ async fn recalculate_beatmap(
 
     log::info!(
         beatmap_id = base_score.beatmap_id,
+        score_count = score_count,
         mode = mode,
         rx = rx;
         "Recalculated beatmap"
