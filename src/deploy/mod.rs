@@ -238,7 +238,7 @@ async fn recalculate_mode_scores(
     };
 
     let beatmap_md5s: Vec<(String,)> = sqlx::query_as(&format!(
-        "SELECT DISTINCT beatmap_md5 FROM {} WHERE completed IN (2, 3) AND play_mode = ? {}",
+        "SELECT beatmap_md5, COUNT(*) AS c FROM {} WHERE completed IN (2, 3) AND play_mode = ? {} GROUP BY beatmap_md5 ORDER BY c DESC",
         scores_table, mods_query_str,
     ))
     .bind(mode)
