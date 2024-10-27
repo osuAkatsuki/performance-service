@@ -29,6 +29,7 @@ fn round(x: f32, decimals: u32) -> f32 {
     (x * y).round() / y
 }
 
+const MAX_CONCURRENT_BEATMAP_TASKS: usize = 10;
 const MAX_CONCURRENT_TASKS: usize = 100;
 const BATCH_SIZE: u32 = 1000;
 
@@ -237,14 +238,14 @@ async fn recalculate_mode_scores(
     };
 
     let beatmap_md5s: Vec<(String,)> = sqlx::query_as(&format!(
-        "SELECT DISTINCT beatmap_md5 FROM {} WHERE completed IN (2, 3) AND play_mode = ? {}",
+        "SELECT beatmap_md5, COUNT(*) AS c FROM {} WHERE completed IN (2, 3) AND play_mode = ? {} GROUP BY beatmap_md5 ORDER BY c DESC",
         scores_table, mods_query_str,
     ))
     .bind(mode)
     .fetch_all(ctx.database.get().await?.deref_mut())
     .await?;
 
-    let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_TASKS));
+    let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_BEATMAP_TASKS));
 
     let mut futures = FuturesUnordered::new();
 
@@ -271,7 +272,7 @@ async fn recalculate_mode_scores(
 
             drop(permit);
 
-            if beatmaps_processed % 1000 == 0 {
+            if beatmaps_processed % 100 == 0 {
                 log::info!(
                     beatmaps_left = total_beatmaps - beatmaps_processed as usize,
                     mode = mode,
@@ -381,7 +382,7 @@ async fn recalculate_statuses(
 
     let beatmap_md5s: Vec<(String,)> = sqlx::query_as(
         &format!(
-            "SELECT DISTINCT (beatmap_md5) FROM {} WHERE userid = ? AND completed IN (2, 3) AND play_mode = ?",
+            "SELECT DISTINCT beatmap_md5 FROM {} WHERE userid = ? AND completed IN (2, 3) AND play_mode = ?",
             scores_table
         )
     )
