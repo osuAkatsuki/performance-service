@@ -382,7 +382,7 @@ async fn recalculate_statuses(
 
     let beatmap_md5s: Vec<(String,)> = sqlx::query_as(
         &format!(
-            "SELECT DISTINCT (beatmap_md5) FROM {} WHERE userid = ? AND completed IN (2, 3) AND play_mode = ?",
+            "SELECT DISTINCT beatmap_md5 FROM {} WHERE userid = ? AND completed IN (2, 3) AND play_mode = ?",
             scores_table
         )
     )
