@@ -29,6 +29,7 @@ fn round(x: f32, decimals: u32) -> f32 {
     (x * y).round() / y
 }
 
+const MAX_CONCURRENT_BEATMAP_TASKS: usize = 10;
 const MAX_CONCURRENT_TASKS: usize = 100;
 const BATCH_SIZE: u32 = 1000;
 
@@ -244,7 +245,7 @@ async fn recalculate_mode_scores(
     .fetch_all(ctx.database.get().await?.deref_mut())
     .await?;
 
-    let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_TASKS));
+    let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_BEATMAP_TASKS));
 
     let mut futures = FuturesUnordered::new();
 
