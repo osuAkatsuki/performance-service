@@ -272,7 +272,7 @@ async fn recalculate_mode_scores(
 
             drop(permit);
 
-            if beatmaps_processed % 1000 == 0 {
+            if beatmaps_processed % 100 == 0 {
                 log::info!(
                     beatmaps_left = total_beatmaps - beatmaps_processed as usize,
                     mode = mode,
