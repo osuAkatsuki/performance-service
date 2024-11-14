@@ -111,7 +111,7 @@ dependencies = [
 [[package]]
 name = "akatsuki-pp"
 version = "1.1.1"
-source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=ca7e57d10faab560448a0c6b70c337965675757c#ca7e57d10faab560448a0c6b70c337965675757c"
+source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=c7d4e68d509951b12fb92c964bd95725444eb438#c7d4e68d509951b12fb92c964bd95725444eb438"
 dependencies = [
  "rosu-map",
  "rosu-mods",
@@ -2584,8 +2584,7 @@ source = "git+https://github.com/MaxOhn/rosu-map?branch=pp-update#9648993aaeab59
 [[package]]
 name = "rosu-mods"
 version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3966ad347b6a8140feaa2424c947ada9b69d29f6966ef2590db34d456eb137be"
+source = "git+https://github.com/MaxOhn/rosu-mods?branch=main#9e9169109bf696a08ef90403b277caa6ca8b96c5"
 
 [[package]]
 name = "rsa"
