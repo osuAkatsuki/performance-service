@@ -83,7 +83,19 @@ async fn queue_user(user_id: i32, rework: &Rework, context: &Context) -> anyhow:
     Ok(())
 }
 
-pub async fn serve(context: Context) -> anyhow::Result<()> {
+struct MassRecalcArgs {
+    rework_id: i32,
+}
+
+fn mass_recalc_args_from_env() -> anyhow::Result<MassRecalcArgs> {
+    let rework_id_str = std::env::var("MASS_RECALC_REWORK_ID")?;
+
+    Ok(MassRecalcArgs {
+        rework_id: rework_id_str.trim().parse::<i32>()?,
+    })
+}
+
+fn mass_recalc_args_from_input() -> anyhow::Result<MassRecalcArgs> {
     print!("Enter a rework ID to mass recalculate: ");
     std::io::stdout().flush()?;
 
@@ -94,33 +106,50 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
     print!("\n");
     std::io::stdout().flush()?;
 
+    Ok(MassRecalcArgs { rework_id })
+}
+
+fn retrieve_mass_recalc_args() -> anyhow::Result<MassRecalcArgs> {
+    let env_mass_recalc_args = mass_recalc_args_from_env();
+
+    if let Ok(mass_recalc_args) = env_mass_recalc_args {
+        Ok(mass_recalc_args)
+    } else {
+        mass_recalc_args_from_input()
+    }
+}
+
+pub async fn serve(context: Context) -> anyhow::Result<()> {
+    let mass_recalc_args = retrieve_mass_recalc_args()?;
+
     log::info!(
-        rework_id = rework_id;
+        rework_id = mass_recalc_args.rework_id;
         "Mass recalculating on rework",
     );
 
-    let rework = usecases::reworks::fetch_one(rework_id, Arc::from(context.clone()))
-        .await?
-        .expect("failed to find rework");
+    let rework =
+        usecases::reworks::fetch_one(mass_recalc_args.rework_id, Arc::from(context.clone()))
+            .await?
+            .expect("failed to find rework");
 
     sqlx::query("DELETE FROM rework_scores WHERE rework_id = ?")
-        .bind(rework_id)
+        .bind(mass_recalc_args.rework_id)
         .execute(context.database.get().await?.deref_mut())
         .await?;
 
     sqlx::query("DELETE FROM rework_stats WHERE rework_id = ?")
-        .bind(rework_id)
+        .bind(mass_recalc_args.rework_id)
         .execute(context.database.get().await?.deref_mut())
         .await?;
 
     sqlx::query("DELETE FROM rework_queue WHERE rework_id = ?")
-        .bind(rework_id)
+        .bind(mass_recalc_args.rework_id)
         .execute(context.database.get().await?.deref_mut())
         .await?;
 
     let mut redis_connection = context.redis.get_async_connection().await?;
     let _: () = redis_connection
-        .del(format!("rework:leaderboard:{}", rework_id))
+        .del(format!("rework:leaderboard:{}", mass_recalc_args.rework_id))
         .await?;
 
     let user_ids: Vec<(i32,)> = sqlx::query_as(
