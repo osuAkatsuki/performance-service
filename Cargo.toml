@@ -59,4 +59,5 @@ remove-manual-adjustments = { package = "akatsuki-pp", git = "https://github.com
 fix-inconsistent-powers = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "773fc16a60546c92b501ad1782757ab897365227", features = [
     "async_tokio",
 ] }
+aim-accuracy-fix = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "ee4e33bdc3beff690eed9cda4c8b164a21643a7e" }
 md5 = "0.7.0"
