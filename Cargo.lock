@@ -110,8 +110,8 @@ dependencies = [
 
 [[package]]
 name = "akatsuki-pp"
-version = "1.1.1"
-source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=c7d4e68d509951b12fb92c964bd95725444eb438#c7d4e68d509951b12fb92c964bd95725444eb438"
+version = "1.1.2"
+source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=281ff8816fbabfb22959b6da367264a56a50759e#281ff8816fbabfb22959b6da367264a56a50759e"
 dependencies = [
  "rosu-map",
  "rosu-mods",
@@ -2095,7 +2095,7 @@ dependencies = [
  "akatsuki-pp 1.0.1 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=72fa5510ef66898308fc6bb3b2f9d3be1dd606c5)",
  "akatsuki-pp 1.0.1 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=773fc16a60546c92b501ad1782757ab897365227)",
  "akatsuki-pp 1.0.1 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=bb1c8ee99a6788f4706fbadee47894590c4fded6)",
- "akatsuki-pp 1.1.1",
+ "akatsuki-pp 1.1.2",
  "anyhow",
  "async-trait",
  "axum",
@@ -2578,13 +2578,15 @@ dependencies = [
 
 [[package]]
 name = "rosu-map"
-version = "0.1.2"
-source = "git+https://github.com/MaxOhn/rosu-map?branch=pp-update#9648993aaeab590fd1df32b5d1b9936da82b1473"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "21de4f8c5cd2738e1c9a2ed477aad2579dacd5acf3845d80738fcec160d0bd8a"
 
 [[package]]
 name = "rosu-mods"
-version = "0.1.1"
-source = "git+https://github.com/MaxOhn/rosu-mods?branch=main#9e9169109bf696a08ef90403b277caa6ca8b96c5"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2a0fb1475e860c987673e8abc1df5d23f22c4e1ae62e9459e656cff4d82f603b"
 
 [[package]]
 name = "rsa"
