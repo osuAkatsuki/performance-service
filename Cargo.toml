@@ -60,5 +60,5 @@ fix-inconsistent-powers = { package = "akatsuki-pp", git = "https://github.com/o
     "async_tokio",
 ] }
 aim-accuracy-fix = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "2bb69c851b3ac08e5efbc4c95a4664581618c2af" }
-improved-miss-penalty-and-acc-rework = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "2cdb0cc102c142fa8a6625b63fa23bb5ea5d8a47" }
+improved-miss-penalty-and-acc-rework = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "c5cb35b62309c2159a466a6d26addde7acf0c231" }
 md5 = "0.7.0"

@@ -129,7 +129,7 @@ dependencies = [
 [[package]]
 name = "akatsuki-pp"
 version = "1.1.2"
-source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=2cdb0cc102c142fa8a6625b63fa23bb5ea5d8a47#2cdb0cc102c142fa8a6625b63fa23bb5ea5d8a47"
+source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=c5cb35b62309c2159a466a6d26addde7acf0c231#c5cb35b62309c2159a466a6d26addde7acf0c231"
 dependencies = [
  "rosu-map",
  "rosu-mods",
@@ -2115,7 +2115,7 @@ dependencies = [
  "akatsuki-pp 1.0.1 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=bb1c8ee99a6788f4706fbadee47894590c4fded6)",
  "akatsuki-pp 1.1.2 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=281ff8816fbabfb22959b6da367264a56a50759e)",
  "akatsuki-pp 1.1.2 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=2bb69c851b3ac08e5efbc4c95a4664581618c2af)",
- "akatsuki-pp 1.1.2 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=2cdb0cc102c142fa8a6625b63fa23bb5ea5d8a47)",
+ "akatsuki-pp 1.1.2 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=c5cb35b62309c2159a466a6d26addde7acf0c231)",
  "anyhow",
  "async-trait",
  "axum",
