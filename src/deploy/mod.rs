@@ -892,8 +892,8 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
                     mode,
                     rx.clone(),
                     context_arc.clone(),
-                    deploy_args.mapper_filter,
-                    deploy_args.map_filter,
+                    deploy_args.mapper_filter.clone(),
+                    deploy_args.map_filter.clone(),
                 )
                 .await?;
             }
@@ -902,8 +902,8 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
                 mode,
                 0,
                 context_arc.clone(),
-                deploy_args.mapper_filter,
-                deploy_args.map_filter,
+                deploy_args.mapper_filter.clone(),
+                deploy_args.map_filter.clone(),
             )
             .await?;
         }
