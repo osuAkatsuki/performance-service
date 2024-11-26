@@ -250,7 +250,14 @@ async fn recalculate_mode_scores(
         .fetch_all(ctx.database.get().await?.deref_mut())
         .await?
     } else if let Some(map_filter) = map_filter {
-        let formatted_beatmap_ids = format!("({})", map_filter.iter().map(|map| map.to_string()).collect::<Vec<String>>().join(","));
+        let formatted_beatmap_ids = format!(
+            "({})",
+            map_filter
+                .iter()
+                .map(|map| map.to_string())
+                .collect::<Vec<String>>()
+                .join(",")
+        );
         sqlx::query_as(&format!(
             "SELECT beatmap_md5, COUNT(*) AS c FROM {} INNER JOIN beatmaps USING(beatmap_md5) 
             WHERE completed IN (2, 3) AND play_mode = ? {} AND beatmaps.beatmap_id IN {} GROUP BY beatmap_md5 ORDER BY c DESC",
@@ -420,7 +427,14 @@ async fn recalculate_statuses(
             .fetch_all(ctx.database.get().await?.deref_mut())
             .await?
     } else if let Some(map_filter) = map_filter {
-        let formatted_beatmap_ids = format!("({})", map_filter.iter().map(|map| map.to_string()).collect::<Vec<String>>().join(","));
+        let formatted_beatmap_ids = format!(
+            "({})",
+            map_filter
+                .iter()
+                .map(|map| map.to_string())
+                .collect::<Vec<String>>()
+                .join(",")
+        );
         sqlx::query_as(
             &format!(
                 "SELECT DISTINCT beatmap_md5 FROM {} INNER JOIN beatmaps USING(beatmap_md5) 
@@ -612,6 +626,8 @@ async fn recalculate_mode_users(
         for (user_id,) in user_id_chunk {
             let semaphore = semaphore.clone();
             let ctx = ctx.clone();
+            let mapper_filter = mapper_filter.clone();
+            let map_filter = map_filter.clone();
 
             let permit = semaphore.acquire_owned().await?;
 
@@ -677,11 +693,13 @@ fn deploy_args_from_env() -> anyhow::Result<DeployArgs> {
         mods_filter: mods_filter_str
             .map(|mods| mods.trim().parse::<i32>().expect("failed to parse mods")),
         mapper_filter: mapper_filter_str,
-        map_filter: map_filter_str
-            .trim()
-            .split(',')
-            .map(|map_filter| map_filter.parse::<i32>().expect("failed to parse map"))
-            .collect::<Vec<_>>(),
+        map_filter: map_filter_str.map(|map_filter| {
+            map_filter
+                .trim()
+                .split(',')
+                .map(|map_filter| map_filter.parse::<i32>().expect("failed to parse map"))
+                .collect::<Vec<_>>()
+        }),
     })
 }
 
@@ -792,7 +810,13 @@ fn deploy_args_from_input() -> anyhow::Result<DeployArgs> {
 
         let mut map_str = String::new();
         std::io::stdin().read_line(&mut map_str)?;
-        map_filter = Some(map_str.trim().split(',').map(|s| s.parse<i32>().expect("failed to parse map")).collect::<Vec<_>>());
+        map_filter = Some(
+            map_str
+                .trim()
+                .split(',')
+                .map(|s| s.parse::<i32>().expect("failed to parse map"))
+                .collect::<Vec<_>>(),
+        );
 
         print!("\n");
         std::io::stdout().flush()?;
@@ -837,20 +861,21 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
                         rx.clone(),
                         context_arc.clone(),
                         deploy_args.mods_filter,
-                        deploy_args.mapper_filter,
-                        deploy_args.map_filter,
+                        deploy_args.mapper_filter.clone(),
+                        deploy_args.map_filter.clone(),
                     )
                     .await?;
                 }
             } else {
                 recalculate_mode_scores(
-                    mode, 0,
+                    mode,
+                    0,
                     context_arc.clone(),
                     deploy_args.mods_filter,
-                    deploy_args.mapper_filter,
-                    deploy_args.map_filter,
+                    deploy_args.mapper_filter.clone(),
+                    deploy_args.map_filter.clone(),
                 )
-                    .await?;
+                .await?;
             }
         }
     }
@@ -863,10 +888,24 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
 
         if rx || ap {
             for rx in &deploy_args.relax_bits {
-                recalculate_mode_users(mode, rx.clone(), context_arc.clone(), deploy_args.mapper_filter, deploy_args.map_filter).await?;
+                recalculate_mode_users(
+                    mode,
+                    rx.clone(),
+                    context_arc.clone(),
+                    deploy_args.mapper_filter,
+                    deploy_args.map_filter,
+                )
+                .await?;
             }
         } else {
-            recalculate_mode_users(mode, 0, context_arc.clone(), deploy_args.mapper_filter, deploy_args.map_filter).await?;
+            recalculate_mode_users(
+                mode,
+                0,
+                context_arc.clone(),
+                deploy_args.mapper_filter,
+                deploy_args.map_filter,
+            )
+            .await?;
         }
     }
 
