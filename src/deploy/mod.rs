@@ -54,7 +54,7 @@ async fn recalculate_relax_scores(
     ctx: Arc<Context>,
 ) -> anyhow::Result<()> {
     let difficulty_attributes =
-        akatsuki_pp_rs::osu_2019::stars::stars(&beatmap, (mods as u32).into());
+        akatsuki_pp_rs::osu_2019::stars::stars(&beatmap, (mods as u32).into(), None);
 
     for score in scores {
         let result =
