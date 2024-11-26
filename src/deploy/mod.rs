@@ -457,8 +457,10 @@ async fn recalculate_user(
     mode: i32,
     rx: i32,
     ctx: Arc<Context>,
+    mapper_filter: Option<String>,
+    map_filter: Option<Vec<i32>>,
 ) -> anyhow::Result<()> {
-    recalculate_statuses(user_id, mode, rx, ctx.clone()).await?;
+    recalculate_statuses(user_id, mode, rx, ctx.clone(), mapper_filter, map_filter).await?;
 
     let scores_table = match rx {
         0 => "scores",
@@ -589,7 +591,13 @@ async fn recalculate_user(
     Ok(())
 }
 
-async fn recalculate_mode_users(mode: i32, rx: i32, ctx: Arc<Context>) -> anyhow::Result<()> {
+async fn recalculate_mode_users(
+    mode: i32,
+    rx: i32,
+    ctx: Arc<Context>,
+    mapper_filter: Option<String>,
+    map_filter: Option<Vec<i32>>,
+) -> anyhow::Result<()> {
     let user_ids: Vec<(i32,)> = sqlx::query_as(&format!("SELECT id FROM users"))
         .fetch_all(ctx.database.get().await?.deref_mut())
         .await?;
@@ -608,7 +616,7 @@ async fn recalculate_mode_users(mode: i32, rx: i32, ctx: Arc<Context>) -> anyhow
             let permit = semaphore.acquire_owned().await?;
 
             futures.push(tokio::spawn(async move {
-                recalculate_user(user_id, mode, rx, ctx).await?;
+                recalculate_user(user_id, mode, rx, ctx, mapper_filter, map_filter).await?;
                 drop(permit);
                 Ok::<(), anyhow::Error>(())
             }))
@@ -669,13 +677,11 @@ fn deploy_args_from_env() -> anyhow::Result<DeployArgs> {
         mods_filter: mods_filter_str
             .map(|mods| mods.trim().parse::<i32>().expect("failed to parse mods")),
         mapper_filter: mapper_filter_str,
-        map_filter: map_filter_str.map(|map_filter| {
-            map_filter.trim().split(',').map(|s| {
-                s.parse::<i32>()
-                    .expect("failed to parse map")
-                    .collect::<Vec<_>>()
-            })
-        }),
+        map_filter: map_filter_str
+            .trim()
+            .split(',')
+            .map(|map_filter| map_filter.parse::<i32>().expect("failed to parse map"))
+            .collect::<Vec<_>>(),
     })
 }
 
@@ -756,14 +762,14 @@ fn deploy_args_from_input() -> anyhow::Result<DeployArgs> {
     print!("\n");
     std::io::stdout().flush()?;
 
-    let mut mapper_filter: Option<Vec<String>> = None;
+    let mut mapper_filter: Option<String> = None;
     if mapper_recalc_only {
         print!("Mappers (comma delimited string): ");
         std::io::stdout().flush()?;
 
         let mut mapper_str = String::new();
         std::io::stdin().read_line(&mut mapper_str)?;
-        mapper_filter = Some(mapper_str.trim());
+        mapper_filter = Some(mapper_str.trim().to_string());
 
         print!("\n");
         std::io::stdout().flush()?;
@@ -831,11 +837,19 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
                         rx.clone(),
                         context_arc.clone(),
                         deploy_args.mods_filter,
+                        deploy_args.mapper_filter,
+                        deploy_args.map_filter,
                     )
                     .await?;
                 }
             } else {
-                recalculate_mode_scores(mode, 0, context_arc.clone(), deploy_args.mods_filter, deploy_args.mapper_filter)
+                recalculate_mode_scores(
+                    mode, 0,
+                    context_arc.clone(),
+                    deploy_args.mods_filter,
+                    deploy_args.mapper_filter,
+                    deploy_args.map_filter,
+                )
                     .await?;
             }
         }
@@ -849,10 +863,10 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
 
         if rx || ap {
             for rx in &deploy_args.relax_bits {
-                recalculate_mode_users(mode, rx.clone(), context_arc.clone()).await?;
+                recalculate_mode_users(mode, rx.clone(), context_arc.clone(), deploy_args.mapper_filter, deploy_args.map_filter).await?;
             }
         } else {
-            recalculate_mode_users(mode, 0, context_arc.clone()).await?;
+            recalculate_mode_users(mode, 0, context_arc.clone(), deploy_args.mapper_filter, deploy_args.map_filter).await?;
         }
     }
 
