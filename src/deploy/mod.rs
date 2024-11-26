@@ -250,13 +250,13 @@ async fn recalculate_mode_scores(
         .fetch_all(ctx.database.get().await?.deref_mut())
         .await?
     } else if let Some(map_filter) = map_filter {
+        let formatted_beatmap_ids = format!("({})", map_filter.iter().map(|map| map.to_string()).collect::<Vec<String>>().join(","));
         sqlx::query_as(&format!(
             "SELECT beatmap_md5, COUNT(*) AS c FROM {} INNER JOIN beatmaps USING(beatmap_md5) 
-            WHERE completed IN (2, 3) AND play_mode = ? {} AND beatmaps.beatmap_id IN ? GROUP BY beatmap_md5 ORDER BY c DESC",
-            scores_table, mods_query_str,
+            WHERE completed IN (2, 3) AND play_mode = ? {} AND beatmaps.beatmap_id IN {} GROUP BY beatmap_md5 ORDER BY c DESC",
+            scores_table, mods_query_str, formatted_beatmap_ids
         ))
         .bind(mode)
-        .bind(map_filter)
         .fetch_all(ctx.database.get().await?.deref_mut())
         .await?
     } else {
@@ -420,16 +420,16 @@ async fn recalculate_statuses(
             .fetch_all(ctx.database.get().await?.deref_mut())
             .await?
     } else if let Some(map_filter) = map_filter {
+        let formatted_beatmap_ids = format!("({})", map_filter.iter().map(|map| map.to_string()).collect::<Vec<String>>().join(","));
         sqlx::query_as(
             &format!(
                 "SELECT DISTINCT beatmap_md5 FROM {} INNER JOIN beatmaps USING(beatmap_md5) 
-                WHERE userid = ? AND completed IN (2, 3) AND play_mode = ? AND beatmaps.beatmap_id IN ?",
-                scores_table
+                WHERE userid = ? AND completed IN (2, 3) AND play_mode = ? AND beatmaps.beatmap_id IN {}",
+                scores_table, formatted_beatmap_ids
             )
         )
             .bind(user_id)
             .bind(mode)
-            .bind(map_filter)
             .fetch_all(ctx.database.get().await?.deref_mut())
             .await?
     } else {
