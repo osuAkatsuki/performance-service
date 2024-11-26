@@ -8,6 +8,7 @@ use crate::{
     usecases,
 };
 
+use lapin::options::QueuePurgeOptions;
 use lapin::{options::BasicPublishOptions, BasicProperties};
 use redis::AsyncCommands;
 
@@ -131,6 +132,11 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
         usecases::reworks::fetch_one(mass_recalc_args.rework_id, Arc::from(context.clone()))
             .await?
             .expect("failed to find rework");
+
+    context
+        .amqp_channel
+        .queue_purge("rework_queue", QueuePurgeOptions::default())
+        .await?;
 
     sqlx::query("DELETE FROM rework_scores WHERE rework_id = ?")
         .bind(mass_recalc_args.rework_id)
