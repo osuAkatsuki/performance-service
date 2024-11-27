@@ -452,8 +452,8 @@ async fn recalculate_statuses(
         sqlx::query_as(
             &format!(
                 "SELECT DISTINCT beatmap_md5 FROM {} INNER JOIN beatmaps USING(beatmap_md5) 
-                WHERE userid = ? AND completed IN (2, 3) AND play_mode = ? AND beatmaps.beatmap_id IN {}",
-                scores_table, formatted_beatmap_ids
+                WHERE userid = ? AND completed IN (2, 3) AND play_mode = ? AND beatmaps.beatmap_id IN {} {}",
+                scores_table, formatted_beatmap_ids, mods_query_str
             )
         )
             .bind(user_id)
@@ -463,8 +463,8 @@ async fn recalculate_statuses(
     } else {
         sqlx::query_as(
             &format!(
-                "SELECT DISTINCT beatmap_md5 FROM {} WHERE userid = ? AND completed IN (2, 3) AND play_mode = ?",
-                scores_table
+                "SELECT DISTINCT beatmap_md5 FROM {} WHERE userid = ? AND completed IN (2, 3) AND play_mode = ? {}",
+                scores_table, mods_query_str
             )
         )
             .bind(user_id)
