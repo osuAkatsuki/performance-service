@@ -703,6 +703,7 @@ struct DeployArgs {
     modes: Vec<i32>,
     relax_bits: Vec<i32>,
     total_pp_only: bool,
+    total_pp: bool,
     mods_filter: Option<i32>,
     neq_mods_filter: Option<i32>,
     mapper_filter: Option<String>,
@@ -713,6 +714,7 @@ fn deploy_args_from_env() -> anyhow::Result<DeployArgs> {
     let modes_str = std::env::var("DEPLOY_MODES")?;
     let relax_bits_str = std::env::var("DEPLOY_RELAX_BITS")?;
     let total_pp_only_str = std::env::var("DEPLOY_TOTAL_PP_ONLY").unwrap_or("".to_string());
+    let total_pp_str = std::env::var("DEPLOY_TOTAL_PP").unwrap_or("".to_string());
     let mods_filter_str = std::env::var("DEPLOY_MODS_FILTER").ok();
     let neq_mods_filter_str = std::env::var("DEPLOY_NEQ_MODS_FILTER").ok();
     let mapper_filter_str = std::env::var("DEPLOY_MAPPER_FILTER").ok();
@@ -730,6 +732,7 @@ fn deploy_args_from_env() -> anyhow::Result<DeployArgs> {
             .map(|s| s.parse::<i32>().expect("failed to parse relax bits"))
             .collect::<Vec<_>>(),
         total_pp_only: total_pp_only_str.to_lowercase().trim() == "1",
+        total_pp: total_pp_str.to_lowercase().trim() == "1",
         mods_filter: mods_filter_str
             .map(|mods| mods.trim().parse::<i32>().expect("failed to parse mods")),
         neq_mods_filter: neq_mods_filter_str
@@ -780,6 +783,16 @@ fn deploy_args_from_input() -> anyhow::Result<DeployArgs> {
     let mut total_only_str = String::new();
     std::io::stdin().read_line(&mut total_only_str)?;
     let total_only = total_only_str.to_lowercase().trim() == "y";
+
+    print!("\n");
+    std::io::stdout().flush()?;
+
+    print!("Total PP (y/n): ");
+    std::io::stdout().flush()?;
+
+    let mut total_str = String::new();
+    std::io::stdin().read_line(&mut total_str)?;
+    let total = total_str.to_lowercase().trim() == "y";
 
     print!("\n");
     std::io::stdout().flush()?;
@@ -896,6 +909,7 @@ fn deploy_args_from_input() -> anyhow::Result<DeployArgs> {
         modes,
         relax_bits,
         total_pp_only: total_only,
+        total_pp: total,
         mods_filter: mods_value,
         neq_mods_filter: neq_mods_value,
         mapper_filter,
@@ -951,6 +965,10 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
                 .await?;
             }
         }
+    }
+
+    if !deploy_args.total_pp {
+        return Ok(());
     }
 
     for mode in &deploy_args.modes {
