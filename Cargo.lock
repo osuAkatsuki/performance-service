@@ -111,15 +111,6 @@ dependencies = [
 [[package]]
 name = "akatsuki-pp"
 version = "1.1.2"
-source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=159cdcee847c258f6f58c1e82de0ef0548e05132#159cdcee847c258f6f58c1e82de0ef0548e05132"
-dependencies = [
- "rosu-map",
- "rosu-mods",
-]
-
-[[package]]
-name = "akatsuki-pp"
-version = "1.1.2"
 source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=2bb69c851b3ac08e5efbc4c95a4664581618c2af#2bb69c851b3ac08e5efbc4c95a4664581618c2af"
 dependencies = [
  "rosu-map",
@@ -139,6 +130,15 @@ dependencies = [
 name = "akatsuki-pp"
 version = "1.1.2"
 source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=c5cb35b62309c2159a466a6d26addde7acf0c231#c5cb35b62309c2159a466a6d26addde7acf0c231"
+dependencies = [
+ "rosu-map",
+ "rosu-mods",
+]
+
+[[package]]
+name = "akatsuki-pp"
+version = "1.1.2"
+source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=eea6bc2eb092d70a549a0f6e85bd4e796e3e6b50#eea6bc2eb092d70a549a0f6e85bd4e796e3e6b50"
 dependencies = [
  "rosu-map",
  "rosu-mods",
@@ -2122,10 +2122,10 @@ dependencies = [
  "akatsuki-pp 1.0.1 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=72fa5510ef66898308fc6bb3b2f9d3be1dd606c5)",
  "akatsuki-pp 1.0.1 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=773fc16a60546c92b501ad1782757ab897365227)",
  "akatsuki-pp 1.0.1 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=bb1c8ee99a6788f4706fbadee47894590c4fded6)",
- "akatsuki-pp 1.1.2 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=159cdcee847c258f6f58c1e82de0ef0548e05132)",
  "akatsuki-pp 1.1.2 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=2bb69c851b3ac08e5efbc4c95a4664581618c2af)",
  "akatsuki-pp 1.1.2 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=c0e499ec3ac138c7cc329771fc70992de39fbb77)",
  "akatsuki-pp 1.1.2 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=c5cb35b62309c2159a466a6d26addde7acf0c231)",
+ "akatsuki-pp 1.1.2 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=eea6bc2eb092d70a549a0f6e85bd4e796e3e6b50)",
  "anyhow",
  "async-trait",
  "axum",
