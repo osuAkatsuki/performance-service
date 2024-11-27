@@ -224,6 +224,7 @@ async fn recalculate_mode_scores(
     rx: i32,
     ctx: Arc<Context>,
     mods_value: Option<i32>,
+    neq_mods_value: Option<i32>,
     mapper_filter: Option<String>,
     map_filter: Option<Vec<i32>>,
 ) -> anyhow::Result<()> {
@@ -234,9 +235,12 @@ async fn recalculate_mode_scores(
         _ => unreachable!(),
     };
 
-    let mods_query_str = match mods_value {
-        Some(mods) => format!("AND (mods & {}) > 0", mods),
-        None => "".to_string(),
+    let mods_query_str = if let Some(mods_value) = mods_value {
+        format!("AND (mods & {}) > 0", mods_value)
+    } else if let Some(neq_mods_value) = neq_mods_value {
+        format!("AND (mods & {}) = 0", neq_mods_value)
+    } else {
+        "".to_string()
     };
 
     let beatmap_md5s: Vec<(String,)> = if let Some(mapper_filter) = mapper_filter {
@@ -403,6 +407,8 @@ async fn recalculate_statuses(
     mode: i32,
     rx: i32,
     ctx: Arc<Context>,
+    mods_value: Option<i32>,
+    neq_mods_value: Option<i32>,
     mapper_filter: Option<String>,
     map_filter: Option<Vec<i32>>,
 ) -> anyhow::Result<()> {
@@ -413,12 +419,20 @@ async fn recalculate_statuses(
         _ => unreachable!(),
     };
 
+    let mods_query_str = if let Some(mods_value) = mods_value {
+        format!("AND (mods & {}) > 0", mods_value)
+    } else if let Some(neq_mods_value) = neq_mods_value {
+        format!("AND (mods & {}) = 0", neq_mods_value)
+    } else {
+        "".to_string()
+    };
+
     let beatmap_md5s: Vec<(String,)> = if let Some(mapper_filter) = mapper_filter {
         sqlx::query_as(
             &format!(
                 "SELECT DISTINCT beatmap_md5 FROM {} INNER JOIN beatmaps USING(beatmap_md5) 
-                WHERE userid = ? AND completed IN (2, 3) AND play_mode = ? AND beatmaps.file_name LIKE ?",
-                scores_table
+                WHERE userid = ? AND completed IN (2, 3) AND play_mode = ? AND beatmaps.file_name LIKE ? {}",
+                scores_table, mods_query_str,
             )
         )
             .bind(user_id)
@@ -471,10 +485,22 @@ async fn recalculate_user(
     mode: i32,
     rx: i32,
     ctx: Arc<Context>,
+    mods_value: Option<i32>,
+    neq_mods_value: Option<i32>,
     mapper_filter: Option<String>,
     map_filter: Option<Vec<i32>>,
 ) -> anyhow::Result<()> {
-    recalculate_statuses(user_id, mode, rx, ctx.clone(), mapper_filter, map_filter).await?;
+    recalculate_statuses(
+        user_id,
+        mode,
+        rx,
+        ctx.clone(),
+        mods_value,
+        neq_mods_value,
+        mapper_filter,
+        map_filter,
+    )
+    .await?;
 
     let scores_table = match rx {
         0 => "scores",
@@ -609,6 +635,8 @@ async fn recalculate_mode_users(
     mode: i32,
     rx: i32,
     ctx: Arc<Context>,
+    mods_value: Option<i32>,
+    neq_mods_value: Option<i32>,
     mapper_filter: Option<String>,
     map_filter: Option<Vec<i32>>,
 ) -> anyhow::Result<()> {
@@ -632,7 +660,17 @@ async fn recalculate_mode_users(
             let permit = semaphore.acquire_owned().await?;
 
             futures.push(tokio::spawn(async move {
-                recalculate_user(user_id, mode, rx, ctx, mapper_filter, map_filter).await?;
+                recalculate_user(
+                    user_id,
+                    mode,
+                    rx,
+                    ctx,
+                    mods_value,
+                    neq_mods_value,
+                    mapper_filter,
+                    map_filter,
+                )
+                .await?;
                 drop(permit);
                 Ok::<(), anyhow::Error>(())
             }))
@@ -666,6 +704,7 @@ struct DeployArgs {
     relax_bits: Vec<i32>,
     total_pp_only: bool,
     mods_filter: Option<i32>,
+    neq_mods_filter: Option<i32>,
     mapper_filter: Option<String>,
     map_filter: Option<Vec<i32>>,
 }
@@ -675,6 +714,7 @@ fn deploy_args_from_env() -> anyhow::Result<DeployArgs> {
     let relax_bits_str = std::env::var("DEPLOY_RELAX_BITS")?;
     let total_pp_only_str = std::env::var("DEPLOY_TOTAL_PP_ONLY").unwrap_or("".to_string());
     let mods_filter_str = std::env::var("DEPLOY_MODS_FILTER").ok();
+    let neq_mods_filter_str = std::env::var("DEPLOY_NEQ_MODS_FILTER").ok();
     let mapper_filter_str = std::env::var("DEPLOY_MAPPER_FILTER").ok();
     let map_filter_str = std::env::var("DEPLOY_MAP_FILTER").ok();
 
@@ -691,6 +731,8 @@ fn deploy_args_from_env() -> anyhow::Result<DeployArgs> {
             .collect::<Vec<_>>(),
         total_pp_only: total_pp_only_str.to_lowercase().trim() == "1",
         mods_filter: mods_filter_str
+            .map(|mods| mods.trim().parse::<i32>().expect("failed to parse mods")),
+        neq_mods_filter: neq_mods_filter_str
             .map(|mods| mods.trim().parse::<i32>().expect("failed to parse mods")),
         mapper_filter: mapper_filter_str,
         map_filter: map_filter_str.map(|map_filter| {
@@ -770,6 +812,34 @@ fn deploy_args_from_input() -> anyhow::Result<DeployArgs> {
         std::io::stdout().flush()?;
     }
 
+    print!("Neq mod value recalc only (y/n): ");
+    std::io::stdout().flush()?;
+
+    let mut neq_mod_recalc_value_only_str = String::new();
+    std::io::stdin().read_line(&mut neq_mod_recalc_value_only_str)?;
+    let neq_mod_recalc_value_only = neq_mod_recalc_value_only_str.to_lowercase().trim() == "y";
+
+    print!("\n");
+    std::io::stdout().flush()?;
+
+    let mut neq_mods_value: Option<i32> = None;
+    if neq_mod_recalc_value_only {
+        print!("Neq mods value (int): ");
+        std::io::stdout().flush()?;
+
+        let mut neq_mods_value_str = String::new();
+        std::io::stdin().read_line(&mut neq_mods_value_str)?;
+        neq_mods_value = Some(
+            neq_mods_value_str
+                .trim()
+                .parse::<i32>()
+                .expect("failed to parse mods"),
+        );
+
+        print!("\n");
+        std::io::stdout().flush()?;
+    }
+
     print!("Mapper recalc only (y/n): ");
     std::io::stdout().flush()?;
 
@@ -827,6 +897,7 @@ fn deploy_args_from_input() -> anyhow::Result<DeployArgs> {
         relax_bits,
         total_pp_only: total_only,
         mods_filter: mods_value,
+        neq_mods_filter: neq_mods_value,
         mapper_filter,
         map_filter,
     })
@@ -861,6 +932,7 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
                         rx.clone(),
                         context_arc.clone(),
                         deploy_args.mods_filter,
+                        deploy_args.neq_mods_filter,
                         deploy_args.mapper_filter.clone(),
                         deploy_args.map_filter.clone(),
                     )
@@ -872,6 +944,7 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
                     0,
                     context_arc.clone(),
                     deploy_args.mods_filter,
+                    deploy_args.neq_mods_filter,
                     deploy_args.mapper_filter.clone(),
                     deploy_args.map_filter.clone(),
                 )
@@ -892,6 +965,8 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
                     mode,
                     rx.clone(),
                     context_arc.clone(),
+                    deploy_args.mods_filter,
+                    deploy_args.neq_mods_filter,
                     deploy_args.mapper_filter.clone(),
                     deploy_args.map_filter.clone(),
                 )
@@ -902,6 +977,8 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
                 mode,
                 0,
                 context_arc.clone(),
+                deploy_args.mods_filter,
+                deploy_args.neq_mods_filter,
                 deploy_args.mapper_filter.clone(),
                 deploy_args.map_filter.clone(),
             )
