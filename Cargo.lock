@@ -120,6 +120,15 @@ dependencies = [
 [[package]]
 name = "akatsuki-pp"
 version = "1.1.2"
+source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=576954a0acce53fb73a9131b3ca98fff520399c0#576954a0acce53fb73a9131b3ca98fff520399c0"
+dependencies = [
+ "rosu-map",
+ "rosu-mods",
+]
+
+[[package]]
+name = "akatsuki-pp"
+version = "1.1.2"
 source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=c0e499ec3ac138c7cc329771fc70992de39fbb77#c0e499ec3ac138c7cc329771fc70992de39fbb77"
 dependencies = [
  "rosu-map",
@@ -130,15 +139,6 @@ dependencies = [
 name = "akatsuki-pp"
 version = "1.1.2"
 source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=c5cb35b62309c2159a466a6d26addde7acf0c231#c5cb35b62309c2159a466a6d26addde7acf0c231"
-dependencies = [
- "rosu-map",
- "rosu-mods",
-]
-
-[[package]]
-name = "akatsuki-pp"
-version = "1.1.2"
-source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=eea6bc2eb092d70a549a0f6e85bd4e796e3e6b50#eea6bc2eb092d70a549a0f6e85bd4e796e3e6b50"
 dependencies = [
  "rosu-map",
  "rosu-mods",
@@ -2123,9 +2123,9 @@ dependencies = [
  "akatsuki-pp 1.0.1 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=773fc16a60546c92b501ad1782757ab897365227)",
  "akatsuki-pp 1.0.1 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=bb1c8ee99a6788f4706fbadee47894590c4fded6)",
  "akatsuki-pp 1.1.2 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=2bb69c851b3ac08e5efbc4c95a4664581618c2af)",
+ "akatsuki-pp 1.1.2 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=576954a0acce53fb73a9131b3ca98fff520399c0)",
  "akatsuki-pp 1.1.2 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=c0e499ec3ac138c7cc329771fc70992de39fbb77)",
  "akatsuki-pp 1.1.2 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=c5cb35b62309c2159a466a6d26addde7acf0c231)",
- "akatsuki-pp 1.1.2 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=eea6bc2eb092d70a549a0f6e85bd4e796e3e6b50)",
  "anyhow",
  "async-trait",
  "axum",
