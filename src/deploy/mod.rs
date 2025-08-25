@@ -175,6 +175,7 @@ async fn recalculate_beatmap(
             USING(beatmap_md5)
         WHERE
             completed IN (2, 3)
+            AND pp = 0
             AND play_mode = ?
             AND s.beatmap_md5 = ?
             {}
@@ -246,7 +247,7 @@ async fn recalculate_mode_scores(
     let beatmap_md5s: Vec<(String,)> = if let Some(mapper_filter) = mapper_filter {
         sqlx::query_as(&format!(
             "SELECT beatmap_md5, COUNT(*) AS c FROM {} INNER JOIN beatmaps USING(beatmap_md5) 
-            WHERE completed IN (2, 3) AND play_mode = ? {} AND beatmaps.file_name LIKE ? GROUP BY beatmap_md5 ORDER BY c DESC",
+            WHERE completed IN (2, 3) AND play_mode = ? AND pp = 0 {} AND beatmaps.file_name LIKE ? GROUP BY beatmap_md5 ORDER BY c DESC",
             scores_table, mods_query_str,
         ))
         .bind(mode)
@@ -264,7 +265,7 @@ async fn recalculate_mode_scores(
         );
         sqlx::query_as(&format!(
             "SELECT beatmap_md5, COUNT(*) AS c FROM {} INNER JOIN beatmaps USING(beatmap_md5) 
-            WHERE completed IN (2, 3) AND play_mode = ? {} AND beatmaps.beatmap_id IN {} GROUP BY beatmap_md5 ORDER BY c DESC",
+            WHERE completed IN (2, 3) AND play_mode = ? AND pp = 0 {} AND beatmaps.beatmap_id IN {} GROUP BY beatmap_md5 ORDER BY c DESC",
             scores_table, mods_query_str, formatted_beatmap_ids
         ))
         .bind(mode)
@@ -272,7 +273,7 @@ async fn recalculate_mode_scores(
         .await?
     } else {
         sqlx::query_as(&format!(
-            "SELECT beatmap_md5, COUNT(*) AS c FROM {} WHERE completed IN (2, 3) AND play_mode = ? {} GROUP BY beatmap_md5 ORDER BY c DESC",
+            "SELECT beatmap_md5, COUNT(*) AS c FROM {} WHERE completed IN (2, 3) AND play_mode = ? AND pp = 0 {} GROUP BY beatmap_md5 ORDER BY c DESC",
             scores_table, mods_query_str,
         ))
         .bind(mode)

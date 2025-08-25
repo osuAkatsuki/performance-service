@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - le-recalc
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
