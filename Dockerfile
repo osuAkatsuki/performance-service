@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.3-labs
 
-FROM rust:latest AS build
+FROM rust:bookworm AS build
 
 RUN cargo new --lib /performance-service
 COPY Cargo.toml Cargo.lock /performance-service/
