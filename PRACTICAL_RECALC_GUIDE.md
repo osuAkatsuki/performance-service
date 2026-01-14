@@ -2,6 +2,30 @@
 
 This guide covers how to run a full PP recalculation in production.
 
+## Kubernetes (Recommended)
+
+If running in Kubernetes, use the pre-made Job manifests in [`k8s/jobs/`](k8s/jobs/):
+
+```bash
+# Quick start - test with a single beatmap
+kubectl apply -f k8s/jobs/examples/test-single-beatmap.yaml
+kubectl logs -f job/performance-service-deploy-test-single-beatmap
+
+# Or generate a custom job
+cd k8s/jobs
+./generate-job.sh --name my-recalc --modes 0,1,2,3 --relax 0,1,2
+kubectl apply -f recalc-job-my-recalc.yaml
+kubectl logs -f job/performance-service-deploy-my-recalc
+```
+
+See [`k8s/jobs/README.md`](k8s/jobs/README.md) for full documentation.
+
+---
+
+## Manual Execution (Non-K8s)
+
+For environments without Kubernetes, or for local testing.
+
 ## Prerequisites
 
 The `deploy` component needs network access to:

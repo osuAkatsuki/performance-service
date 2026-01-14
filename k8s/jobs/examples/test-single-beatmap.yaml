@@ -1,0 +1,58 @@
+# Test Recalculation - Single Beatmap
+#
+# Use this to verify the recalculation system is working before running
+# a full recalc. Targets beatmap ID 75 (Disco Prince) as a simple test.
+#
+# Edit DEPLOY_MAP_FILTER to test with a different beatmap.
+#
+# Apply:   kubectl apply -f test-single-beatmap.yaml
+# Monitor: kubectl logs -f job/performance-service-deploy-test-single-beatmap
+# Delete:  kubectl delete job performance-service-deploy-test-single-beatmap
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: performance-service-deploy-test-single-beatmap
+spec:
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        sidecar.istio.io/inject: "false"
+    spec:
+      containers:
+      - name: performance-service
+        image: osuakatsuki/performance-service:latest
+        imagePullPolicy: Always
+        env:
+          - name: KUBERNETES
+            value: "true"
+          - name: PULL_SECRETS_FROM_VAULT
+            value: "1"
+          - name: VAULT_ADDR
+            valueFrom:
+              secretKeyRef:
+                name: vault
+                key: address
+          - name: VAULT_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: vault
+                key: token
+          - name: APP_ENV
+            value: production
+          - name: APP_COMPONENT
+            value: deploy
+          - name: DEPLOY_MODES
+            value: "0"
+          - name: DEPLOY_RELAX_BITS
+            value: "0,1"
+          - name: DEPLOY_MAP_FILTER
+            value: "75"
+          - name: DEPLOY_TOTAL_PP_ONLY
+            value: "0"
+          - name: DEPLOY_TOTAL_PP
+            value: "1"
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: osuakatsuki-registry-secret
