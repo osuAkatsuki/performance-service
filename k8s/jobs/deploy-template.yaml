@@ -1,0 +1,97 @@
+# PP Recalculation Job Template
+#
+# Copy this file, customize the environment variables, and apply:
+#   kubectl apply -f my-recalc-job.yaml
+#
+# Monitor progress:
+#   kubectl logs -f job/performance-service-deploy-YOURNAME
+#
+# Clean up after completion:
+#   kubectl delete job performance-service-deploy-YOURNAME
+#
+# For easier job generation, use: ./generate-job.sh (see below)
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  # Give your job a unique, descriptive name
+  name: performance-service-deploy-CHANGEME
+spec:
+  # Keep job history for 24 hours after completion
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        sidecar.istio.io/inject: "false"
+    spec:
+      containers:
+      - name: performance-service
+        image: osuakatsuki/performance-service:latest
+        imagePullPolicy: Always
+        env:
+          # ----- Required: Vault Configuration -----
+          - name: KUBERNETES
+            value: "true"
+          - name: PULL_SECRETS_FROM_VAULT
+            value: "1"
+          - name: VAULT_ADDR
+            valueFrom:
+              secretKeyRef:
+                name: vault
+                key: address
+          - name: VAULT_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: vault
+                key: token
+          - name: APP_ENV
+            value: production
+
+          # ----- Required: Component -----
+          - name: APP_COMPONENT
+            value: deploy
+
+          # ----- Required: Mode Selection -----
+          # Game modes: 0=std, 1=taiko, 2=catch, 3=mania
+          - name: DEPLOY_MODES
+            value: "0,1,2,3"
+
+          # Variants: 0=vanilla, 1=relax, 2=autopilot
+          # Note: Only mode 0 (std) supports autopilot (2)
+          - name: DEPLOY_RELAX_BITS
+            value: "0,1,2"
+
+          # ----- Required: Phase Selection -----
+          # Phase 1: Recalculate individual score PP values
+          # Set to "1" to SKIP Phase 1 (only aggregate user totals)
+          - name: DEPLOY_TOTAL_PP_ONLY
+            value: "0"
+
+          # Phase 2: Aggregate user total PP and update leaderboards
+          # Set to "1" to run Phase 2
+          - name: DEPLOY_TOTAL_PP
+            value: "1"
+
+          # ----- Optional: Filters -----
+          # Uncomment and set any of these to filter which scores are recalculated
+
+          # Filter to specific beatmap IDs (comma-separated)
+          # - name: DEPLOY_MAP_FILTER
+          #   value: "75,129891,1816113"
+
+          # Filter to scores WITH these mods (bitmask)
+          # Common values: 8=HD, 16=HR, 64=DT, 72=HDDT, 80=HDHR, 88=HDHRDT
+          # - name: DEPLOY_MODS_FILTER
+          #   value: "64"
+
+          # Filter to scores WITHOUT these mods (bitmask)
+          # - name: DEPLOY_NEQ_MODS_FILTER
+          #   value: "64"
+
+          # Filter by mapper name (fuzzy match on beatmap filename)
+          # - name: DEPLOY_MAPPER_FILTER
+          #   value: "Sotarks"
+
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: osuakatsuki-registry-secret
