@@ -603,7 +603,7 @@ async fn recalculate_user(
         };
 
         redis_connection
-            .zadd(
+            .zadd::<_, _, _, ()>(
                 format!("ripple:{}:{}", redis_leaderboard, stats_prefix),
                 user_id.to_string(),
                 new_pp,
@@ -611,7 +611,7 @@ async fn recalculate_user(
             .await?;
 
         redis_connection
-            .zadd(
+            .zadd::<_, _, _, ()>(
                 format!(
                     "ripple:{}:{}:{}",
                     redis_leaderboard,
@@ -625,7 +625,7 @@ async fn recalculate_user(
     }
 
     redis_connection
-        .publish("peppy:update_cached_stats", user_id)
+        .publish::<_, _, ()>("peppy:update_cached_stats", user_id)
         .await?;
 
     Ok(())
