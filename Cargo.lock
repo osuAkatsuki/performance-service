@@ -2146,6 +2146,7 @@ dependencies = [
  "lapin",
  "log",
  "md5",
+ "percent-encoding",
  "redis",
  "reqwest",
  "rkyv",

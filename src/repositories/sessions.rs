@@ -40,7 +40,7 @@ impl SessionsRepository {
             session_token = Some(new_token);
         }
 
-        Ok(session_token.unwrap())
+        Ok(session_token.expect("session_token must be Some after creation or retrieval"))
     }
 
     pub async fn delete(&self, session_token: String) -> anyhow::Result<()> {

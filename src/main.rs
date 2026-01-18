@@ -1,6 +1,7 @@
 use clap::Parser;
 use deadpool_lapin::{Manager, Pool};
 use lapin::ConnectionProperties;
+use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use performance_service::{
     api, config::Config, context::Context, deploy, individual_recalc, mass_recalc,
     models::pool::DbPool, processor,
@@ -23,8 +24,15 @@ fn redis_url(
 ) -> String {
     let scheme = if use_ssl { "rediss" } else { "redis" };
     let auth = match (username, password) {
-        (Some(u), Some(p)) => format!("{}:{}@", u, p),
-        (None, Some(p)) => format!(":{}@", p),
+        (Some(u), Some(p)) => {
+            let encoded_user = utf8_percent_encode(u, NON_ALPHANUMERIC);
+            let encoded_pass = utf8_percent_encode(p, NON_ALPHANUMERIC);
+            format!("{}:{}@", encoded_user, encoded_pass)
+        }
+        (None, Some(p)) => {
+            let encoded_pass = utf8_percent_encode(p, NON_ALPHANUMERIC);
+            format!(":{}@", encoded_pass)
+        }
         _ => String::new(),
     };
     format!("{}://{}{}:{}/{}", scheme, auth, host, port, db)
