@@ -308,12 +308,9 @@ async fn handle_queue_request(
     context: Arc<Context>,
     delivery_tag: u64,
 ) -> anyhow::Result<()> {
-    let rework = usecases::reworks::fetch_one(request.rework_id, context.clone()).await?;
-    if rework.is_none() {
+    let Some(rework) = usecases::reworks::fetch_one(request.rework_id, context.clone()).await? else {
         anyhow::bail!("failed to find rework");
-    }
-
-    let rework = rework.unwrap();
+    };
     let scores_table = match rework.rx {
         0 => "scores",
         1 => "scores_relax",
@@ -410,7 +407,7 @@ async fn handle_queue_request(
     .execute(context.database.get().await?.deref_mut())
     .await?;
 
-    let mut redis_connection = context.redis.get_async_connection().await?;
+    let mut redis_connection = context.redis.get_multiplexed_async_connection().await?;
     let _: () = redis_connection
         .zadd(
             format!("rework:leaderboard:{}", request.rework_id),
@@ -479,8 +476,8 @@ async fn rmq_listen(context: Arc<Context>) -> anyhow::Result<()> {
             )
             .await;
 
-            if result.is_err() {
-                log::error!(error = result.unwrap_err().to_string(); "Error processing queue request");
+            if let Err(e) = result {
+                log::error!(error = e.to_string(); "Error processing queue request");
             }
         }
 

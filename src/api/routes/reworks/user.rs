@@ -36,11 +36,9 @@ async fn get_rework_user(
             .fetch_optional(ctx.database.get().await?.deref_mut())
             .await?;
 
-    if user_info.is_none() {
+    let Some((user_name, country)) = user_info else {
         return Ok(Json(None));
-    }
-
-    let (user_name, country) = user_info.unwrap();
+    };
 
     let rework_stats: Vec<ReworkStats> =
         sqlx::query_as("SELECT * FROM rework_stats WHERE user_id = ?")
@@ -86,11 +84,9 @@ async fn get_rework_stats(
         .fetch_optional(ctx.database.get().await?.deref_mut())
         .await?;
 
-    if stats.is_none() {
+    let Some(stats) = stats else {
         return Ok(Json(None));
-    }
-
-    let stats = stats.unwrap();
+    };
 
     let (username, user_country): (String, String) =
         sqlx::query_as("SELECT username, country FROM users WHERE id = ?")
@@ -98,7 +94,7 @@ async fn get_rework_stats(
             .fetch_one(ctx.database.get().await?.deref_mut())
             .await?;
 
-    let mut redis_connection = ctx.redis.get_async_connection().await?;
+    let mut redis_connection = ctx.redis.get_multiplexed_async_connection().await?;
 
     let rework: Rework = sqlx::query_as("SELECT * FROM reworks WHERE rework_id = ?")
         .bind(rework_id)

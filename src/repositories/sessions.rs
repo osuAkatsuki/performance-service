@@ -13,45 +13,45 @@ impl SessionsRepository {
     }
 
     pub async fn create(&self, user_id: i32) -> anyhow::Result<String> {
-        let mut redis_conn = self.context.redis.get_async_connection().await?;
+        let mut redis_conn = self.context.redis.get_multiplexed_async_connection().await?;
         let mut session_token: Option<String> = redis_conn
             .get(format!("rework:sessions:ids:{}", user_id))
             .await?;
 
         if session_token.is_none() {
-            session_token = Some(Uuid::new_v4().to_string());
+            let new_token = Uuid::new_v4().to_string();
 
             let _: () = redis_conn
                 .set_ex(
                     format!("rework:sessions:ids:{}", user_id),
-                    session_token.clone().unwrap(),
+                    &new_token,
                     3600 * 2, // 2 hours
                 )
                 .await?;
 
             let _: () = redis_conn
                 .set_ex(
-                    format!("rework:sessions:{}", session_token.clone().unwrap()),
+                    format!("rework:sessions:{}", &new_token),
                     user_id,
                     3600 * 2, // 2 hours
                 )
                 .await?;
+
+            session_token = Some(new_token);
         }
 
-        Ok(session_token.unwrap())
+        Ok(session_token.expect("session_token must be Some after creation or retrieval"))
     }
 
     pub async fn delete(&self, session_token: String) -> anyhow::Result<()> {
-        let mut connection = self.context.redis.get_async_connection().await?;
+        let mut connection = self.context.redis.get_multiplexed_async_connection().await?;
         let user_id: Option<i32> = connection
             .get(format!("rework:sessions:{}", session_token))
             .await?;
 
-        if user_id.is_none() {
+        let Some(user_id) = user_id else {
             return Ok(());
-        }
-
-        let user_id = user_id.unwrap();
+        };
 
         let _: () = connection
             .del(format!("rework:sessions:{}", session_token))

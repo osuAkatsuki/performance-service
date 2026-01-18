@@ -583,7 +583,7 @@ async fn recalculate_user(
         None => 60,
     };
 
-    let mut redis_connection = ctx.redis.get_async_connection().await?;
+    let mut redis_connection = ctx.redis.get_multiplexed_async_connection().await?;
 
     // unrestricted, and set a score in the past 2 months
     if user_privileges & 1 > 0 && inactive_days < 60 {
@@ -602,16 +602,16 @@ async fn recalculate_user(
             _ => unreachable!(),
         };
 
-        redis_connection
-            .zadd::<_, _, _, ()>(
+        let _: () = redis_connection
+            .zadd(
                 format!("ripple:{}:{}", redis_leaderboard, stats_prefix),
                 user_id.to_string(),
                 new_pp,
             )
             .await?;
 
-        redis_connection
-            .zadd::<_, _, _, ()>(
+        let _: () = redis_connection
+            .zadd(
                 format!(
                     "ripple:{}:{}:{}",
                     redis_leaderboard,
@@ -624,8 +624,8 @@ async fn recalculate_user(
             .await?;
     }
 
-    redis_connection
-        .publish::<_, _, ()>("peppy:update_cached_stats", user_id)
+    let _: () = redis_connection
+        .publish("peppy:update_cached_stats", user_id)
         .await?;
 
     Ok(())
@@ -640,7 +640,7 @@ async fn recalculate_mode_users(
     mapper_filter: Option<String>,
     map_filter: Option<Vec<i32>>,
 ) -> anyhow::Result<()> {
-    let user_ids: Vec<(i32,)> = sqlx::query_as(&format!("SELECT id FROM users"))
+    let user_ids: Vec<i32> = sqlx::query_scalar(&format!("SELECT id FROM users"))
         .fetch_all(ctx.database.get().await?.deref_mut())
         .await?;
 
@@ -648,10 +648,10 @@ async fn recalculate_mode_users(
 
     let mut users_recalculated = 0;
 
-    for user_id_chunk in user_ids.chunks(BATCH_SIZE as usize).map(|c| c.to_vec()) {
+    for user_id_chunk in user_ids.chunks(BATCH_SIZE as usize) {
         let mut futures = FuturesUnordered::new();
 
-        for (user_id,) in user_id_chunk {
+        for user_id in user_id_chunk {
             let semaphore = semaphore.clone();
             let ctx = ctx.clone();
             let mapper_filter = mapper_filter.clone();

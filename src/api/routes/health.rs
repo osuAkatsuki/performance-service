@@ -13,7 +13,7 @@ async fn health(Extension(ctx): Extension<Arc<Context>>) -> http::StatusCode {
     let mut is_redis_ok = false;
     let mut is_database_ok = false;
 
-    if let Ok(mut conn) = ctx.redis.get_async_connection().await {
+    if let Ok(mut conn) = ctx.redis.get_multiplexed_async_connection().await {
         if let Ok(_result) = conn
             .req_packed_command(&Cmd::new().arg("PING").arg(1))
             .await

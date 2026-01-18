@@ -23,7 +23,7 @@ fn api_router() -> Router {
 
 pub async fn serve(ctx: Context) -> anyhow::Result<()> {
     let server_port = ctx.config.api_port.unwrap();
-    let server_host = ctx.config.api_host.clone().unwrap();
+    let server_host = ctx.config.api_host.as_ref().unwrap().clone();
 
     let app = api_router().layer(
         ServiceBuilder::new()

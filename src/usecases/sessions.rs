@@ -67,7 +67,7 @@ pub async fn enqueue(
     rework_id: i32,
     context: Arc<Context>,
 ) -> anyhow::Result<QueueResponse> {
-    let mut redis_conn = context.redis.get_async_connection().await?;
+    let mut redis_conn = context.redis.get_multiplexed_async_connection().await?;
     let user_id: Option<i32> = redis_conn
         .get(format!("rework:sessions:{}", session_token))
         .await?;

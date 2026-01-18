@@ -1,16 +1,41 @@
 use clap::Parser;
 use deadpool_lapin::{Manager, Pool};
 use lapin::ConnectionProperties;
+use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use performance_service::{
     api, config::Config, context::Context, deploy, individual_recalc, mass_recalc,
     models::pool::DbPool, processor,
 };
-use redis::{Client, ConnectionAddr, ConnectionInfo, RedisConnectionInfo};
+use redis::Client;
 use sqlx::{mysql::MySqlConnectOptions, ConnectOptions};
 use structured_logger::{async_json::new_writer, Builder};
 
 fn amqp_dsn(username: &str, password: &str, host: &str, port: u16) -> String {
-    return format!("amqp://{}:{}@{}:{}", username, password, host, port);
+    format!("amqp://{}:{}@{}:{}", username, password, host, port)
+}
+
+fn redis_url(
+    use_ssl: bool,
+    host: &str,
+    port: u16,
+    username: Option<&str>,
+    password: Option<&str>,
+    db: i64,
+) -> String {
+    let scheme = if use_ssl { "rediss" } else { "redis" };
+    let auth = match (username, password) {
+        (Some(u), Some(p)) => {
+            let encoded_user = utf8_percent_encode(u, NON_ALPHANUMERIC);
+            let encoded_pass = utf8_percent_encode(p, NON_ALPHANUMERIC);
+            format!("{}:{}@", encoded_user, encoded_pass)
+        }
+        (None, Some(p)) => {
+            let encoded_pass = utf8_percent_encode(p, NON_ALPHANUMERIC);
+            format!(":{}@", encoded_pass)
+        }
+        _ => String::new(),
+    };
+    format!("{}://{}{}:{}/{}", scheme, auth, host, port, db)
 }
 
 #[tokio::main]
@@ -45,22 +70,15 @@ async fn main() -> anyhow::Result<()> {
         .build()?;
     let amqp_channel = amqp.get().await?.create_channel().await?;
 
-    let redis_connection_options = ConnectionInfo {
-        addr: match config.redis_use_ssl {
-            true => ConnectionAddr::TcpTls {
-                host: config.redis_host.clone(),
-                port: config.redis_port,
-                insecure: false,
-            },
-            false => ConnectionAddr::Tcp(config.redis_host.clone(), config.redis_port),
-        },
-        redis: RedisConnectionInfo {
-            db: config.redis_database,
-            password: config.redis_password.clone(),
-            username: config.redis_username.clone(),
-        },
-    };
-    let redis = Client::open(redis_connection_options)?;
+    let redis_url = redis_url(
+        config.redis_use_ssl,
+        &config.redis_host,
+        config.redis_port,
+        config.redis_username.as_deref(),
+        config.redis_password.as_deref(),
+        config.redis_database,
+    );
+    let redis = Client::open(redis_url)?;
 
     let context = Context {
         config,
