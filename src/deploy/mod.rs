@@ -640,7 +640,7 @@ async fn recalculate_mode_users(
     mapper_filter: Option<String>,
     map_filter: Option<Vec<i32>>,
 ) -> anyhow::Result<()> {
-    let user_ids: Vec<(i32,)> = sqlx::query_as(&format!("SELECT id FROM users"))
+    let user_ids: Vec<i32> = sqlx::query_scalar(&format!("SELECT id FROM users"))
         .fetch_all(ctx.database.get().await?.deref_mut())
         .await?;
 
