@@ -10,7 +10,7 @@ use sqlx::{mysql::MySqlConnectOptions, ConnectOptions};
 use structured_logger::{async_json::new_writer, Builder};
 
 fn amqp_dsn(username: &str, password: &str, host: &str, port: u16) -> String {
-    return format!("amqp://{}:{}@{}:{}", username, password, host, port);
+    format!("amqp://{}:{}@{}:{}", username, password, host, port)
 }
 
 #[tokio::main]

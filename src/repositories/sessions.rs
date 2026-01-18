@@ -19,23 +19,25 @@ impl SessionsRepository {
             .await?;
 
         if session_token.is_none() {
-            session_token = Some(Uuid::new_v4().to_string());
+            let new_token = Uuid::new_v4().to_string();
 
             let _: () = redis_conn
                 .set_ex(
                     format!("rework:sessions:ids:{}", user_id),
-                    session_token.clone().unwrap(),
+                    &new_token,
                     3600 * 2, // 2 hours
                 )
                 .await?;
 
             let _: () = redis_conn
                 .set_ex(
-                    format!("rework:sessions:{}", session_token.clone().unwrap()),
+                    format!("rework:sessions:{}", &new_token),
                     user_id,
                     3600 * 2, // 2 hours
                 )
                 .await?;
+
+            session_token = Some(new_token);
         }
 
         Ok(session_token.unwrap())
@@ -47,11 +49,9 @@ impl SessionsRepository {
             .get(format!("rework:sessions:{}", session_token))
             .await?;
 
-        if user_id.is_none() {
+        let Some(user_id) = user_id else {
             return Ok(());
-        }
-
-        let user_id = user_id.unwrap();
+        };
 
         let _: () = connection
             .del(format!("rework:sessions:{}", session_token))

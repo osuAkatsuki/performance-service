@@ -602,16 +602,16 @@ async fn recalculate_user(
             _ => unreachable!(),
         };
 
-        redis_connection
-            .zadd::<_, _, _, ()>(
+        let _: () = redis_connection
+            .zadd(
                 format!("ripple:{}:{}", redis_leaderboard, stats_prefix),
                 user_id.to_string(),
                 new_pp,
             )
             .await?;
 
-        redis_connection
-            .zadd::<_, _, _, ()>(
+        let _: () = redis_connection
+            .zadd(
                 format!(
                     "ripple:{}:{}:{}",
                     redis_leaderboard,
@@ -624,8 +624,8 @@ async fn recalculate_user(
             .await?;
     }
 
-    redis_connection
-        .publish::<_, _, ()>("peppy:update_cached_stats", user_id)
+    let _: () = redis_connection
+        .publish("peppy:update_cached_stats", user_id)
         .await?;
 
     Ok(())
@@ -648,10 +648,10 @@ async fn recalculate_mode_users(
 
     let mut users_recalculated = 0;
 
-    for user_id_chunk in user_ids.chunks(BATCH_SIZE as usize).map(|c| c.to_vec()) {
+    for user_id_chunk in user_ids.chunks(BATCH_SIZE as usize) {
         let mut futures = FuturesUnordered::new();
 
-        for (user_id,) in user_id_chunk {
+        for &(user_id,) in user_id_chunk {
             let semaphore = semaphore.clone();
             let ctx = ctx.clone();
             let mapper_filter = mapper_filter.clone();
