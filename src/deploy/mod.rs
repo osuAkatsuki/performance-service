@@ -651,7 +651,7 @@ async fn recalculate_mode_users(
     for user_id_chunk in user_ids.chunks(BATCH_SIZE as usize) {
         let mut futures = FuturesUnordered::new();
 
-        for &(user_id,) in user_id_chunk {
+        for user_id in user_id_chunk {
             let semaphore = semaphore.clone();
             let ctx = ctx.clone();
             let mapper_filter = mapper_filter.clone();
