@@ -13,7 +13,7 @@ impl SessionsRepository {
     }
 
     pub async fn create(&self, user_id: i32) -> anyhow::Result<String> {
-        let mut redis_conn = self.context.redis.get_async_connection().await?;
+        let mut redis_conn = self.context.redis.get_multiplexed_async_connection().await?;
         let mut session_token: Option<String> = redis_conn
             .get(format!("rework:sessions:ids:{}", user_id))
             .await?;
@@ -44,7 +44,7 @@ impl SessionsRepository {
     }
 
     pub async fn delete(&self, session_token: String) -> anyhow::Result<()> {
-        let mut connection = self.context.redis.get_async_connection().await?;
+        let mut connection = self.context.redis.get_multiplexed_async_connection().await?;
         let user_id: Option<i32> = connection
             .get(format!("rework:sessions:{}", session_token))
             .await?;

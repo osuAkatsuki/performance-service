@@ -94,7 +94,7 @@ async fn get_rework_stats(
             .fetch_one(ctx.database.get().await?.deref_mut())
             .await?;
 
-    let mut redis_connection = ctx.redis.get_async_connection().await?;
+    let mut redis_connection = ctx.redis.get_multiplexed_async_connection().await?;
 
     let rework: Rework = sqlx::query_as("SELECT * FROM reworks WHERE rework_id = ?")
         .bind(rework_id)

@@ -583,7 +583,7 @@ async fn recalculate_user(
         None => 60,
     };
 
-    let mut redis_connection = ctx.redis.get_async_connection().await?;
+    let mut redis_connection = ctx.redis.get_multiplexed_async_connection().await?;
 
     // unrestricted, and set a score in the past 2 months
     if user_privileges & 1 > 0 && inactive_days < 60 {

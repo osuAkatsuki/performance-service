@@ -407,7 +407,7 @@ async fn handle_queue_request(
     .execute(context.database.get().await?.deref_mut())
     .await?;
 
-    let mut redis_connection = context.redis.get_async_connection().await?;
+    let mut redis_connection = context.redis.get_multiplexed_async_connection().await?;
     let _: () = redis_connection
         .zadd(
             format!("rework:leaderboard:{}", request.rework_id),

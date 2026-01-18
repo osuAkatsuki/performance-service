@@ -153,7 +153,7 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
         .execute(context.database.get().await?.deref_mut())
         .await?;
 
-    let mut redis_connection = context.redis.get_async_connection().await?;
+    let mut redis_connection = context.redis.get_multiplexed_async_connection().await?;
     let _: () = redis_connection
         .del(format!("rework:leaderboard:{}", mass_recalc_args.rework_id))
         .await?;
