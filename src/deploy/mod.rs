@@ -661,7 +661,7 @@ async fn recalculate_mode_users(
 
             futures.push(tokio::spawn(async move {
                 recalculate_user(
-                    user_id,
+                    *user_id,
                     mode,
                     rx,
                     ctx,
