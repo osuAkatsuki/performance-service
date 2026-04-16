@@ -275,6 +275,7 @@ async fn process_scores(
             26 => calculate_aim_accuracy_fix_pp(score, context.clone()).await?,
             27 => calculate_improved_miss_penalty_and_acc_rework_pp(score, context.clone()).await?,
             28 => calculate_everything_at_once_pp(score, context.clone()).await?,
+            29 => calculate_kippy_attempt_pp(score, context.clone()).await?,
             _ => unreachable!(),
         };
 
