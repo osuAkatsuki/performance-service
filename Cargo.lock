@@ -111,10 +111,19 @@ dependencies = [
 [[package]]
 name = "akatsuki-pp"
 version = "1.1.2"
+source = "git+https://github.com/kippysevenstars/akatsuki-pp-rs?rev=001cc6eb920c4945e14b66ca682bfbf8ecedce4b#001cc6eb920c4945e14b66ca682bfbf8ecedce4b"
+dependencies = [
+ "rosu-map",
+ "rosu-mods 0.2.0",
+]
+
+[[package]]
+name = "akatsuki-pp"
+version = "1.1.2"
 source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=2bb69c851b3ac08e5efbc4c95a4664581618c2af#2bb69c851b3ac08e5efbc4c95a4664581618c2af"
 dependencies = [
  "rosu-map",
- "rosu-mods",
+ "rosu-mods 0.2.0",
 ]
 
 [[package]]
@@ -123,7 +132,7 @@ version = "1.1.2"
 source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=6d22dcdcafb70399a5c0380fcad96e3bdd5c4009#6d22dcdcafb70399a5c0380fcad96e3bdd5c4009"
 dependencies = [
  "rosu-map",
- "rosu-mods",
+ "rosu-mods 0.2.0",
 ]
 
 [[package]]
@@ -132,7 +141,7 @@ version = "1.1.2"
 source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=c0e499ec3ac138c7cc329771fc70992de39fbb77#c0e499ec3ac138c7cc329771fc70992de39fbb77"
 dependencies = [
  "rosu-map",
- "rosu-mods",
+ "rosu-mods 0.2.0",
 ]
 
 [[package]]
@@ -141,7 +150,7 @@ version = "1.1.2"
 source = "git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=c5cb35b62309c2159a466a6d26addde7acf0c231#c5cb35b62309c2159a466a6d26addde7acf0c231"
 dependencies = [
  "rosu-map",
- "rosu-mods",
+ "rosu-mods 0.2.0",
 ]
 
 [[package]]
@@ -212,6 +221,12 @@ checksum = "819e7219dbd41043ac279b19830f2efc897156490d7fd6ea916720117ee66311"
 dependencies = [
  "libc",
 ]
+
+[[package]]
+name = "anstyle"
+version = "1.0.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "940b3a0ca603d1eade50a4846a2afffd5ef57a9feac2c0e2ec2e14f9ead76000"
 
 [[package]]
 name = "anyhow"
@@ -750,12 +765,32 @@ dependencies = [
  "atty",
  "bitflags 1.3.2",
  "clap_derive",
- "clap_lex",
+ "clap_lex 0.2.4",
  "indexmap 1.9.3",
  "once_cell",
  "strsim",
  "termcolor",
  "textwrap",
+]
+
+[[package]]
+name = "clap"
+version = "4.5.60"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2797f34da339ce31042b27d23607e051786132987f595b02ba4f6a6dffb7030a"
+dependencies = [
+ "clap_builder",
+]
+
+[[package]]
+name = "clap_builder"
+version = "4.5.60"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "24a241312cea5059b13574bb9b3861cabf758b879c15190b37b6d6fd63ab6876"
+dependencies = [
+ "anstyle",
+ "clap_lex 1.1.0",
+ "terminal_size",
 ]
 
 [[package]]
@@ -779,6 +814,12 @@ checksum = "2850f2f5a82cbf437dd5af4d49848fbdfc27c157c3d010345776f952765261c5"
 dependencies = [
  "os_str_bytes",
 ]
+
+[[package]]
+name = "clap_lex"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 
 [[package]]
 name = "cmake"
@@ -823,6 +864,12 @@ checksum = "4ca0197aee26d1ae37445ee532fefce43251d24cc7c166799f4d46817f1d3973"
 dependencies = [
  "crossbeam-utils",
 ]
+
+[[package]]
+name = "condtype"
+version = "1.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "baf0a07a401f374238ab8e2f11a104d2851bf9ce711ec69804834de8af45c7af"
 
 [[package]]
 name = "const-oid"
@@ -1039,6 +1086,31 @@ name = "displaydoc"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97369cbbc041bc366949bc74d34658d6cda5621039731c6310521892a3a20ae0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.71",
+]
+
+[[package]]
+name = "divan"
+version = "0.1.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a405457ec78b8fe08b0e32b4a3570ab5dff6dd16eb9e76a5ee0a9d9cbd898933"
+dependencies = [
+ "cfg-if",
+ "clap 4.5.60",
+ "condtype",
+ "divan-macros",
+ "libc",
+ "regex-lite",
+]
+
+[[package]]
+name = "divan-macros"
+version = "0.1.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9556bc800956545d6420a640173e5ba7dfa82f38d3ea5a167eb555bc69ac3323"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2128,6 +2200,7 @@ dependencies = [
  "akatsuki-pp 1.0.1 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=72fa5510ef66898308fc6bb3b2f9d3be1dd606c5)",
  "akatsuki-pp 1.0.1 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=773fc16a60546c92b501ad1782757ab897365227)",
  "akatsuki-pp 1.0.1 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=bb1c8ee99a6788f4706fbadee47894590c4fded6)",
+ "akatsuki-pp 1.1.2 (git+https://github.com/kippysevenstars/akatsuki-pp-rs?rev=001cc6eb920c4945e14b66ca682bfbf8ecedce4b)",
  "akatsuki-pp 1.1.2 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=2bb69c851b3ac08e5efbc4c95a4664581618c2af)",
  "akatsuki-pp 1.1.2 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=6d22dcdcafb70399a5c0380fcad96e3bdd5c4009)",
  "akatsuki-pp 1.1.2 (git+https://github.com/osuAkatsuki/akatsuki-pp-rs?rev=c0e499ec3ac138c7cc329771fc70992de39fbb77)",
@@ -2138,7 +2211,7 @@ dependencies = [
  "bcrypt",
  "bytecheck",
  "chrono",
- "clap",
+ "clap 3.2.25",
  "deadpool",
  "deadpool-lapin",
  "dotenv",
@@ -2150,6 +2223,7 @@ dependencies = [
  "redis",
  "reqwest",
  "rkyv",
+ "rosu-pp",
  "serde",
  "serde_json",
  "sqlx",
@@ -2513,6 +2587,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "regex-lite"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cab834c73d247e67f4fae452806d17d3c7501756d98c8808d7c9c7aa7d18f973"
+
+[[package]]
 name = "regex-syntax"
 version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2628,6 +2708,22 @@ name = "rosu-mods"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2a0fb1475e860c987673e8abc1df5d23f22c4e1ae62e9459e656cff4d82f603b"
+
+[[package]]
+name = "rosu-mods"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cc58d42f8f2308b4b241de147827af84179d0a318de250495c7c5e47cb701cd9"
+
+[[package]]
+name = "rosu-pp"
+version = "4.0.1"
+source = "git+https://github.com/infernalfire72/rosu-pp?rev=ab89d750d62a42e47157e4810d576aa5ee915b1b#ab89d750d62a42e47157e4810d576aa5ee915b1b"
+dependencies = [
+ "divan",
+ "rosu-map",
+ "rosu-mods 0.4.1",
+]
 
 [[package]]
 name = "rsa"
@@ -3332,6 +3428,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "terminal_size"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5352447f921fda68cf61b4101566c0bdb5104eff6804d0678e5227580ab6a4e9"
+dependencies = [
+ "rustix 0.38.34",
+ "windows-sys 0.59.0",
+]
+
+[[package]]
 name = "textwrap"
 version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3876,6 +3982,15 @@ name = "windows-sys"
 version = "0.52.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "282be5f36a8ce781fad8c8ae18fa3f9beff57ec1b52cb3de0789201425d9a33d"
+dependencies = [
+ "windows-targets 0.52.6",
+]
+
+[[package]]
+name = "windows-sys"
+version = "0.59.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e38bc4d79ed67fd075bcc251a1c39b32a1776bbe92e5bef1f0bf1f8c531853b"
 dependencies = [
  "windows-targets 0.52.6",
 ]
