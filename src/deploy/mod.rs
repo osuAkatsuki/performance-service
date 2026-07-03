@@ -1,7 +1,7 @@
 use crate::{context::Context, usecases};
 use akatsuki_pp_rs::model::mode::GameMode;
 use akatsuki_pp_rs::Beatmap;
-use anyhow::anyhow;
+use anyhow::{anyhow, Context as _};
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use redis::AsyncCommands;
@@ -341,7 +341,7 @@ async fn recalculate_beatmap(
         scores_table, score_conditions,
     ))
     .bind(mode)
-    .bind(beatmap_md5)
+    .bind(&beatmap_md5)
     .fetch_all(ctx.database.get().await?.deref_mut())
     .await?;
 
@@ -355,9 +355,21 @@ async fn recalculate_beatmap(
     let grouped_scores = group_scores_by_mods(scores);
 
     let beatmap_bytes =
-        usecases::beatmaps::fetch_beatmap_osu_file(base_score.beatmap_id, ctx.clone()).await?;
+        usecases::beatmaps::fetch_beatmap_osu_file(base_score.beatmap_id, ctx.clone())
+            .await
+            .with_context(|| {
+                format!(
+                    "failed to fetch .osu for beatmap_id={} beatmap_md5={}",
+                    base_score.beatmap_id, base_score.beatmap_md5
+                )
+            })?;
 
-    let beatmap = Beatmap::from_bytes(&beatmap_bytes)?;
+    let beatmap = Beatmap::from_bytes(&beatmap_bytes).with_context(|| {
+        format!(
+            "failed to parse .osu for beatmap_id={} beatmap_md5={}",
+            base_score.beatmap_id, base_score.beatmap_md5
+        )
+    })?;
 
     for (mods, mod_scores) in grouped_scores {
         if mode == 0 && rx == 1 {
@@ -466,7 +478,22 @@ async fn recalculate_mode_scores(
         let permit = semaphore.acquire_owned().await?;
 
         futures.push(tokio::spawn(async move {
-            recalculate_beatmap(beatmap_md5, scores_table, filters, mode, rx, ctx, run).await?;
+            recalculate_beatmap(
+                beatmap_md5.clone(),
+                scores_table,
+                filters,
+                mode,
+                rx,
+                ctx,
+                run,
+            )
+            .await
+            .with_context(|| {
+                format!(
+                    "failed to recalculate beatmap_md5={} mode={} rx={}",
+                    beatmap_md5, mode, rx
+                )
+            })?;
             beatmaps_processed += 1;
 
             drop(permit);
@@ -487,11 +514,20 @@ async fn recalculate_mode_scores(
     }
 
     while let Some(result) = futures.next().await {
-        if let Err(e) = result {
-            log::error!(
-                error = e.to_string();
-                "Recalculating beatmap failed",
-            );
+        match result {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => {
+                log::error!(
+                    error = e.to_string();
+                    "Recalculating beatmap failed",
+                );
+            }
+            Err(e) => {
+                log::error!(
+                    error = e.to_string();
+                    "Recalculating beatmap task failed",
+                );
+            }
         }
     }
 
