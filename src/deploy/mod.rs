@@ -787,11 +787,128 @@ async fn find_affected_user_ids(
     Ok(user_ids)
 }
 
+async fn count_matching_scores_and_beatmaps(
+    mode: i32,
+    rx: i32,
+    ctx: Arc<Context>,
+    filters: &DeployFilters,
+) -> anyhow::Result<(i64, i64)> {
+    let scores_table = match rx {
+        0 => "scores",
+        1 => "scores_relax",
+        2 => "scores_ap",
+        _ => unreachable!(),
+    };
+    let score_conditions = filters.score_conditions(Some("s"));
+
+    let counts: (i64, i64) = if let Some(mapper_filter) = &filters.mapper_filter {
+        sqlx::query_as(&format!(
+            "SELECT COUNT(s.id), COUNT(DISTINCT s.beatmap_md5)
+            FROM {} s INNER JOIN beatmaps b USING(beatmap_md5)
+            WHERE s.completed IN (2, 3) AND s.play_mode = ? {} AND b.file_name LIKE ?",
+            scores_table, score_conditions,
+        ))
+        .bind(mode)
+        .bind(format!("%({mapper_filter})%"))
+        .fetch_one(ctx.database.get().await?.deref_mut())
+        .await?
+    } else if let Some(map_filter) = &filters.map_filter {
+        let formatted_beatmap_ids = format!(
+            "({})",
+            map_filter
+                .iter()
+                .map(|map| map.to_string())
+                .collect::<Vec<String>>()
+                .join(",")
+        );
+        sqlx::query_as(&format!(
+            "SELECT COUNT(s.id), COUNT(DISTINCT s.beatmap_md5)
+            FROM {} s INNER JOIN beatmaps b USING(beatmap_md5)
+            WHERE s.completed IN (2, 3) AND s.play_mode = ? {} AND b.beatmap_id IN {}",
+            scores_table, score_conditions, formatted_beatmap_ids
+        ))
+        .bind(mode)
+        .fetch_one(ctx.database.get().await?.deref_mut())
+        .await?
+    } else {
+        sqlx::query_as(&format!(
+            "SELECT COUNT(s.id), COUNT(DISTINCT s.beatmap_md5)
+            FROM {} s
+            WHERE s.completed IN (2, 3) AND s.play_mode = ? {}",
+            scores_table, score_conditions,
+        ))
+        .bind(mode)
+        .fetch_one(ctx.database.get().await?.deref_mut())
+        .await?
+    };
+
+    Ok(counts)
+}
+
+async fn count_all_users(ctx: Arc<Context>) -> anyhow::Result<i64> {
+    sqlx::query_scalar("SELECT COUNT(*) FROM users")
+        .fetch_one(ctx.database.get().await?.deref_mut())
+        .await
+        .map_err(Into::into)
+}
+
+fn recalculation_scopes(deploy_args: &DeployArgs) -> Vec<(i32, i32)> {
+    let mut scopes = Vec::new();
+
+    for mode in &deploy_args.modes {
+        let mode = *mode;
+        let rx = vec![0, 1, 2].contains(&mode);
+        let ap = mode == 0;
+
+        if rx || ap {
+            for rx in &deploy_args.relax_bits {
+                scopes.push((mode, *rx));
+            }
+        } else {
+            scopes.push((mode, 0));
+        }
+    }
+
+    scopes
+}
+
+async fn dry_run_recalculation(deploy_args: &DeployArgs, ctx: Arc<Context>) -> anyhow::Result<()> {
+    for (mode, rx) in recalculation_scopes(deploy_args) {
+        let (matching_scores, matching_beatmaps) =
+            count_matching_scores_and_beatmaps(mode, rx, ctx.clone(), &deploy_args.filters).await?;
+        let affected_users = if deploy_args.filters.score_selection_is_targeted() {
+            find_affected_user_ids(mode, rx, ctx.clone(), &deploy_args.filters)
+                .await?
+                .len() as i64
+        } else if deploy_args.total_pp {
+            count_all_users(ctx.clone()).await?
+        } else {
+            0
+        };
+
+        log::info!(
+            mode = mode,
+            rx = rx,
+            score_recalculation = !deploy_args.total_pp_only,
+            total_pp_recalculation = deploy_args.total_pp,
+            matching_scores = matching_scores,
+            matching_beatmaps = matching_beatmaps,
+            affected_users = affected_users;
+            "Dry run recalculation scope",
+        );
+    }
+
+    log::info!("Dry run complete; no score, stats, leaderboard, or cache updates were performed");
+
+    Ok(())
+}
+
 struct DeployArgs {
     modes: Vec<i32>,
     relax_bits: Vec<i32>,
     total_pp_only: bool,
     total_pp: bool,
+    dry_run: bool,
     filters: DeployFilters,
 }
 
@@ -836,6 +953,11 @@ fn deploy_args_from_env() -> anyhow::Result<DeployArgs> {
     let relax_bits_str = std::env::var("DEPLOY_RELAX_BITS")?;
     let total_pp_only_str = std::env::var("DEPLOY_TOTAL_PP_ONLY").unwrap_or("".to_string());
     let total_pp_str = std::env::var("DEPLOY_TOTAL_PP").unwrap_or("".to_string());
+    let dry_run = std::env::var("DEPLOY_DRY_RUN")
+        .unwrap_or_default()
+        .to_lowercase()
+        .trim()
+        == "1";
     let mods_filter_str = std::env::var("DEPLOY_MODS_FILTER").ok();
     let neq_mods_filter_str = std::env::var("DEPLOY_NEQ_MODS_FILTER").ok();
     let mapper_filter_str = std::env::var("DEPLOY_MAPPER_FILTER").ok();
@@ -860,6 +982,7 @@ fn deploy_args_from_env() -> anyhow::Result<DeployArgs> {
             .collect::<Vec<_>>(),
         total_pp_only: total_pp_only_str.to_lowercase().trim() == "1",
         total_pp: total_pp_str.to_lowercase().trim() == "1",
+        dry_run,
         filters: DeployFilters {
             mods_filter: mods_filter_str
                 .map(|mods| mods.trim().parse::<i32>().expect("failed to parse mods")),
@@ -1041,6 +1164,7 @@ fn deploy_args_from_input() -> anyhow::Result<DeployArgs> {
         relax_bits,
         total_pp_only: total_only,
         total_pp: total,
+        dry_run: false,
         filters: DeployFilters {
             mods_filter: mods_value,
             neq_mods_filter: neq_mods_value,
@@ -1066,6 +1190,11 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
 
     let context_arc = Arc::new(context);
     let mut affected_users_by_scope = HashMap::new();
+
+    if deploy_args.dry_run {
+        dry_run_recalculation(&deploy_args, context_arc).await?;
+        return Ok(());
+    }
 
     if !deploy_args.total_pp_only {
         for mode in &deploy_args.modes {

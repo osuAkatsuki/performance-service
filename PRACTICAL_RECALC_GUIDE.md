@@ -4,48 +4,16 @@ This guide covers how to run a full PP recalculation in production.
 
 ## Hetzner Docker Compose (Recommended)
 
-Production Akatsuki services run from the Hetzner docker compose project. Use
-[`scripts/run-compose-recalc.sh`](scripts/run-compose-recalc.sh) to run the
-`deploy` component with the same image, Vault wiring, and network configuration
-as `performance-service-api`.
-
-The helper is dry-run by default. It prints the exact command first; add
-`--execute` after reviewing it.
+Production Akatsuki services run from the Hetzner docker compose project. Run
+the `deploy` component through the existing `performance-service-api` compose
+service so it uses the same image, Vault wiring, and network configuration.
 
 ```bash
 # SSH into the Hetzner host, then keep the job attached to a durable session.
 ssh hetzner-new
 tmux new -s pp-recalc
 
-# From a performance-service checkout or a copied script:
-scripts/run-compose-recalc.sh --name test-beatmap-75 --maps 75 --modes 0 --relax 0
-scripts/run-compose-recalc.sh --name test-beatmap-75 --maps 75 --modes 0 --relax 0 --execute
-```
-
-By default the helper uses:
-
-- compose project directory: `/opt/akatsuki`
-- compose service: `performance-service-api`
-- log directory: `/opt/akatsuki/logs`
-
-Override those with `--compose-dir`, `--service`, or `--logs-dir` if the host
-layout changes.
-
-### Direct Compose Command
-
-The helper builds this shape of command:
-
-```bash
 cd /opt/akatsuki
-docker compose run --rm --no-deps \
-  -e APP_COMPONENT=deploy \
-  -e APP_ENV=production \
-  -e DEPLOY_MODES=0 \
-  -e DEPLOY_RELAX_BITS=0 \
-  -e DEPLOY_MAP_FILTER=75 \
-  -e DEPLOY_TOTAL_PP_ONLY=0 \
-  -e DEPLOY_TOTAL_PP=1 \
-  performance-service-api 2>&1 | tee /opt/akatsuki/logs/performance-service-recalc-test.log
 ```
 
 `performance-service-api` is used as the base compose service because it already
@@ -54,29 +22,104 @@ points at `ghcr.io/osuakatsuki/performance-service:latest`, sets
 to reach Vault from the container. The `-e APP_COMPONENT=deploy` override makes
 the container run the one-off recalc path instead of the API server.
 
+### Dry Run
+
+```bash
+cd /opt/akatsuki
+docker compose run --rm --no-deps \
+  -e APP_COMPONENT=deploy \
+  -e APP_ENV=production \
+  -e DEPLOY_DRY_RUN=1 \
+  -e DEPLOY_MODES=0,1,2 \
+  -e DEPLOY_RELAX_BITS=1 \
+  -e DEPLOY_PP_ZERO=1 \
+  -e DEPLOY_AFTER_DATE=2026-07-01 \
+  -e DEPLOY_TOTAL_PP_ONLY=0 \
+  -e DEPLOY_TOTAL_PP=1 \
+  performance-service-api 2>&1 | tee /opt/akatsuki/logs/performance-service-recalc-dry-run-$(date +%Y%m%d-%H%M%S).log
+```
+
+`DEPLOY_DRY_RUN=1` only counts and logs matching scores, beatmaps, and affected
+users. It exits before score, stats, Redis leaderboard, or cache updates.
+
 ### Compose Examples
 
 ```bash
 # Pull the latest image and run a full server recalculation.
-scripts/run-compose-recalc.sh --name full-recalc --pull --execute
+docker compose pull performance-service-api
+docker compose run --rm --no-deps \
+  -e APP_COMPONENT=deploy \
+  -e APP_ENV=production \
+  -e DEPLOY_MODES=0,1,2,3 \
+  -e DEPLOY_RELAX_BITS=0,1,2 \
+  -e DEPLOY_TOTAL_PP_ONLY=0 \
+  -e DEPLOY_TOTAL_PP=1 \
+  performance-service-api 2>&1 | tee /opt/akatsuki/logs/performance-service-recalc-full-$(date +%Y%m%d-%H%M%S).log
 
 # Recalculate only osu!std, including vanilla, relax, and autopilot.
-scripts/run-compose-recalc.sh --name std-all --modes 0 --relax 0,1,2 --execute
+docker compose run --rm --no-deps \
+  -e APP_COMPONENT=deploy \
+  -e APP_ENV=production \
+  -e DEPLOY_MODES=0 \
+  -e DEPLOY_RELAX_BITS=0,1,2 \
+  -e DEPLOY_TOTAL_PP_ONLY=0 \
+  -e DEPLOY_TOTAL_PP=1 \
+  performance-service-api 2>&1 | tee /opt/akatsuki/logs/performance-service-recalc-std-$(date +%Y%m%d-%H%M%S).log
 
 # Recalculate only DT scores.
-scripts/run-compose-recalc.sh --name dt-scores --mods 64 --execute
+docker compose run --rm --no-deps \
+  -e APP_COMPONENT=deploy \
+  -e APP_ENV=production \
+  -e DEPLOY_MODES=0,1,2,3 \
+  -e DEPLOY_RELAX_BITS=0,1,2 \
+  -e DEPLOY_MODS_FILTER=64 \
+  -e DEPLOY_TOTAL_PP_ONLY=0 \
+  -e DEPLOY_TOTAL_PP=1 \
+  performance-service-api 2>&1 | tee /opt/akatsuki/logs/performance-service-recalc-dt-$(date +%Y%m%d-%H%M%S).log
 
 # Recalculate scores without DT, NC, or HT.
-scripts/run-compose-recalc.sh --name no-speed-mods --no-mods 832 --execute
+docker compose run --rm --no-deps \
+  -e APP_COMPONENT=deploy \
+  -e APP_ENV=production \
+  -e DEPLOY_MODES=0,1,2,3 \
+  -e DEPLOY_RELAX_BITS=0,1,2 \
+  -e DEPLOY_NEQ_MODS_FILTER=832 \
+  -e DEPLOY_TOTAL_PP_ONLY=0 \
+  -e DEPLOY_TOTAL_PP=1 \
+  performance-service-api 2>&1 | tee /opt/akatsuki/logs/performance-service-recalc-no-speed-mods-$(date +%Y%m%d-%H%M%S).log
 
 # Re-aggregate user totals only, using existing score PP values.
-scripts/run-compose-recalc.sh --name reaggregate-only --total-pp-only --execute
+docker compose run --rm --no-deps \
+  -e APP_COMPONENT=deploy \
+  -e APP_ENV=production \
+  -e DEPLOY_MODES=0,1,2,3 \
+  -e DEPLOY_RELAX_BITS=0,1,2 \
+  -e DEPLOY_TOTAL_PP_ONLY=1 \
+  -e DEPLOY_TOTAL_PP=1 \
+  performance-service-api 2>&1 | tee /opt/akatsuki/logs/performance-service-recalc-reaggregate-$(date +%Y%m%d-%H%M%S).log
 
 # Recalculate specific beatmaps.
-scripts/run-compose-recalc.sh --name specific-maps --maps 1808605,1821147,1844776 --modes 0 --relax 0,1 --execute
+docker compose run --rm --no-deps \
+  -e APP_COMPONENT=deploy \
+  -e APP_ENV=production \
+  -e DEPLOY_MODES=0 \
+  -e DEPLOY_RELAX_BITS=0,1 \
+  -e DEPLOY_MAP_FILTER=1808605,1821147,1844776 \
+  -e DEPLOY_TOTAL_PP_ONLY=0 \
+  -e DEPLOY_TOTAL_PP=1 \
+  performance-service-api 2>&1 | tee /opt/akatsuki/logs/performance-service-recalc-specific-maps-$(date +%Y%m%d-%H%M%S).log
 
 # Repair recent 0pp relax scores from osu!std, taiko, and catch.
-scripts/run-compose-recalc.sh --name recent-relax-0pp --modes 0,1,2 --relax 1 --pp-zero --after-date 2026-07-01 --execute
+docker compose run --rm --no-deps \
+  -e APP_COMPONENT=deploy \
+  -e APP_ENV=production \
+  -e DEPLOY_MODES=0,1,2 \
+  -e DEPLOY_RELAX_BITS=1 \
+  -e DEPLOY_PP_ZERO=1 \
+  -e DEPLOY_AFTER_DATE=2026-07-01 \
+  -e DEPLOY_TOTAL_PP_ONLY=0 \
+  -e DEPLOY_TOTAL_PP=1 \
+  performance-service-api 2>&1 | tee /opt/akatsuki/logs/performance-service-recalc-recent-relax-0pp-$(date +%Y%m%d-%H%M%S).log
 ```
 
 When using `--pp-zero` or `--after-date`, the service captures affected users
@@ -142,7 +185,7 @@ REDIS_PORT=6379
 BEATMAPS_SERVICE_BASE_URL=http://localhost:8080
 ```
 
-### 4. Do a dry run on a single beatmap first (recommended)
+### 4. Test on a single beatmap first (recommended)
 
 Test with one beatmap to verify everything is working:
 
@@ -288,6 +331,7 @@ If you know approximately which beatmaps were already processed, you could use `
 | `DEPLOY_RELAX_BITS` | Comma-separated variants (0=vanilla, 1=relax, 2=autopilot) | `0,1,2` |
 | `DEPLOY_TOTAL_PP_ONLY` | `1` = skip score PP recalc, only aggregate user totals | `0` |
 | `DEPLOY_TOTAL_PP` | `1` = run user total PP aggregation | `1` |
+| `DEPLOY_DRY_RUN` | `1` = log matching score/beatmap/user counts without updates | `1` |
 | `DEPLOY_MODS_FILTER` | Only scores WITH these mods (bitmask) | `64` (DT) |
 | `DEPLOY_NEQ_MODS_FILTER` | Only scores WITHOUT these mods (bitmask) | `64` |
 | `DEPLOY_MAPPER_FILTER` | Filter by mapper name (fuzzy match) | `Sotarks` |
