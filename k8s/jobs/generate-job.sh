@@ -186,7 +186,7 @@ spec:
     spec:
       containers:
       - name: performance-service
-        image: osuakatsuki/performance-service:latest
+        image: ghcr.io/osuakatsuki/performance-service:latest
         imagePullPolicy: Always
         env:
           - name: KUBERNETES

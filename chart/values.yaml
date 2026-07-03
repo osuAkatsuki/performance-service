@@ -9,7 +9,7 @@ apps:
       targetCPUUtilizationPercentage: 80
     container:
       image:
-        repository: osuakatsuki/performance-service
+        repository: ghcr.io/osuakatsuki/performance-service
         tag: latest
       port: 80
       readinessProbe:
@@ -43,7 +43,7 @@ apps:
     replicaCount: 1
     container:
       image:
-        repository: osuakatsuki/performance-service
+        repository: ghcr.io/osuakatsuki/performance-service
         tag: latest
       port: 80
       env:
