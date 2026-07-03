@@ -22,6 +22,26 @@ points at `ghcr.io/osuakatsuki/performance-service:latest`, sets
 to reach Vault from the container. The `-e APP_COMPONENT=deploy` override makes
 the container run the one-off recalc path instead of the API server.
 
+### Preview
+
+```bash
+cd /opt/akatsuki
+docker compose run --rm --no-deps \
+  -e APP_COMPONENT=deploy \
+  -e APP_ENV=production \
+  -e DEPLOY_PREVIEW=1 \
+  -e DEPLOY_MODES=0,1,2 \
+  -e DEPLOY_RELAX_BITS=1 \
+  -e DEPLOY_PP_ZERO=1 \
+  -e DEPLOY_AFTER_DATE=2026-07-01 \
+  -e DEPLOY_TOTAL_PP_ONLY=0 \
+  -e DEPLOY_TOTAL_PP=1 \
+  performance-service-api 2>&1 | tee /opt/akatsuki/logs/performance-service-recalc-preview-$(date +%Y%m%d-%H%M%S).log
+```
+
+`DEPLOY_PREVIEW=1` only counts and logs matching scores, beatmaps, and affected
+users. It exits before score, status, stats, Redis leaderboard, or cache work.
+
 ### Dry Run
 
 ```bash
@@ -39,8 +59,11 @@ docker compose run --rm --no-deps \
   performance-service-api 2>&1 | tee /opt/akatsuki/logs/performance-service-recalc-dry-run-$(date +%Y%m%d-%H%M%S).log
 ```
 
-`DEPLOY_DRY_RUN=1` only counts and logs matching scores, beatmaps, and affected
-users. It exits before score, stats, Redis leaderboard, or cache updates.
+`DEPLOY_DRY_RUN=1` runs the recalculation path, calculates the score PP/status
+and user total changes that execute would make, logs each write it would perform,
+and skips the actual DB, Redis leaderboard, and cache publish writes. This can
+produce a large log for broad recalculations. Do not set `DEPLOY_PREVIEW=1` and
+`DEPLOY_DRY_RUN=1` together.
 
 ### Compose Examples
 
@@ -331,7 +354,8 @@ If you know approximately which beatmaps were already processed, you could use `
 | `DEPLOY_RELAX_BITS` | Comma-separated variants (0=vanilla, 1=relax, 2=autopilot) | `0,1,2` |
 | `DEPLOY_TOTAL_PP_ONLY` | `1` = skip score PP recalc, only aggregate user totals | `0` |
 | `DEPLOY_TOTAL_PP` | `1` = run user total PP aggregation | `1` |
-| `DEPLOY_DRY_RUN` | `1` = log matching score/beatmap/user counts without updates | `1` |
+| `DEPLOY_PREVIEW` | `1` = log matching score/beatmap/user counts without updates | `1` |
+| `DEPLOY_DRY_RUN` | `1` = calculate and log each write without performing it | `1` |
 | `DEPLOY_MODS_FILTER` | Only scores WITH these mods (bitmask) | `64` (DT) |
 | `DEPLOY_NEQ_MODS_FILTER` | Only scores WITHOUT these mods (bitmask) | `64` |
 | `DEPLOY_MAPPER_FILTER` | Filter by mapper name (fuzzy match) | `Sotarks` |

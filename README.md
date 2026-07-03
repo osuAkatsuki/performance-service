@@ -113,7 +113,8 @@ APP_COMPONENT=deploy cargo run --release
 | `DEPLOY_RELAX_BITS` | Comma-separated relax bits | `0,1,2` |
 | `DEPLOY_TOTAL_PP_ONLY` | Set to `1` to skip Phase 1 (score PP recalc) | `0` |
 | `DEPLOY_TOTAL_PP` | Set to `1` to run Phase 2 (user total PP aggregation) | `1` |
-| `DEPLOY_DRY_RUN` | Set to `1` to log matching score/beatmap/user counts without updates | `1` |
+| `DEPLOY_PREVIEW` | Set to `1` to log matching score/beatmap/user counts without updates | `1` |
+| `DEPLOY_DRY_RUN` | Set to `1` to calculate and log each write without performing it | `1` |
 | `DEPLOY_MODS_FILTER` | Only scores WITH these mods (bitmask) | `64` (DT) |
 | `DEPLOY_NEQ_MODS_FILTER` | Only scores WITHOUT these mods | `64` |
 | `DEPLOY_MAPPER_FILTER` | Filter by mapper name (fuzzy) | `Sotarks` |
@@ -182,7 +183,19 @@ DEPLOY_TOTAL_PP=1 \
 APP_COMPONENT=deploy cargo run --release
 ```
 
-**Preview recent 0pp relax score repair without updates:**
+**Preview recent 0pp relax score repair counts without updates:**
+```bash
+DEPLOY_MODES=0,1,2 \
+DEPLOY_RELAX_BITS=1 \
+DEPLOY_PP_ZERO=1 \
+DEPLOY_AFTER_DATE=2026-07-01 \
+DEPLOY_TOTAL_PP_ONLY=0 \
+DEPLOY_TOTAL_PP=1 \
+DEPLOY_PREVIEW=1 \
+APP_COMPONENT=deploy cargo run --release
+```
+
+**Dry-run recent 0pp relax score repair and log skipped writes:**
 ```bash
 DEPLOY_MODES=0,1,2 \
 DEPLOY_RELAX_BITS=1 \

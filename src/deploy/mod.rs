@@ -5,23 +5,83 @@ use anyhow::anyhow;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use redis::AsyncCommands;
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::io::Write;
 use std::{ops::DerefMut, sync::Arc, time::SystemTime};
-use tokio::sync::Semaphore;
+use tokio::sync::{Mutex, Semaphore};
 
 #[derive(Clone, sqlx::FromRow)]
 struct LightweightScore {
     pub id: i64,
+    #[sqlx(rename = "userid")]
+    pub user_id: i32,
+    pub beatmap_md5: String,
     pub mods: i32,
     pub max_combo: i32,
     pub play_mode: i32,
     pub beatmap_id: i32,
     pub pp: f32,
     pub accuracy: f32,
+    pub completed: i32,
 
     #[sqlx(rename = "misses_count")]
     pub count_misses: i32,
+}
+
+#[derive(Clone, sqlx::FromRow)]
+struct ScoreStatus {
+    pub id: i64,
+    pub pp: f32,
+    pub completed: i32,
+}
+
+#[derive(Clone)]
+struct RecalculationRun {
+    dry_run: bool,
+    dry_run_score_pp: Option<Arc<Mutex<HashMap<i64, f32>>>>,
+    dry_run_completed: Option<Arc<Mutex<HashMap<i64, i32>>>>,
+}
+
+impl RecalculationRun {
+    fn new(dry_run: bool) -> Self {
+        Self {
+            dry_run,
+            dry_run_score_pp: dry_run.then(|| Arc::new(Mutex::new(HashMap::new()))),
+            dry_run_completed: dry_run.then(|| Arc::new(Mutex::new(HashMap::new()))),
+        }
+    }
+
+    async fn record_score_pp(&self, score_id: i64, pp: f32) {
+        if let Some(score_pp) = &self.dry_run_score_pp {
+            score_pp.lock().await.insert(score_id, pp);
+        }
+    }
+
+    async fn record_completed(&self, score_id: i64, completed: i32) {
+        if let Some(completed_by_score_id) = &self.dry_run_completed {
+            completed_by_score_id
+                .lock()
+                .await
+                .insert(score_id, completed);
+        }
+    }
+
+    async fn score_pp(&self, score_id: i64) -> Option<f32> {
+        let Some(score_pp) = &self.dry_run_score_pp else {
+            return None;
+        };
+
+        score_pp.lock().await.get(&score_id).copied()
+    }
+
+    async fn completed(&self, score_id: i64) -> Option<i32> {
+        let Some(completed_by_score_id) = &self.dry_run_completed else {
+            return None;
+        };
+
+        completed_by_score_id.lock().await.get(&score_id).copied()
+    }
 }
 
 fn round(x: f32, decimals: u32) -> f32 {
@@ -116,12 +176,69 @@ fn group_scores_by_mods(vec: Vec<LightweightScore>) -> HashMap<i32, Vec<Lightwei
     grouped_map
 }
 
+async fn write_score_pp(
+    score: &LightweightScore,
+    new_pp: f64,
+    scores_table: &str,
+    rx: i32,
+    ctx: Arc<Context>,
+    run: &RecalculationRun,
+) -> anyhow::Result<()> {
+    let new_pp_for_stats = new_pp as f32;
+
+    if run.dry_run {
+        run.record_score_pp(score.id, new_pp_for_stats).await;
+        log::info!(
+            score_id = score.id,
+            user_id = score.user_id,
+            beatmap_md5 = score.beatmap_md5.as_str(),
+            beatmap_id = score.beatmap_id,
+            scores_table = scores_table,
+            mode = score.play_mode,
+            rx = rx,
+            mods = score.mods,
+            old_pp = score.pp,
+            new_pp = new_pp,
+            changed = score.pp != new_pp_for_stats;
+            "Dry run would update score pp",
+        );
+
+        return Ok(());
+    }
+
+    let result = sqlx::query(&format!("UPDATE {} SET pp = ? WHERE id = ?", scores_table))
+        .bind(new_pp)
+        .bind(score.id)
+        .execute(ctx.database.get().await?.deref_mut())
+        .await?;
+
+    log::info!(
+        score_id = score.id,
+        user_id = score.user_id,
+        beatmap_md5 = score.beatmap_md5.as_str(),
+        beatmap_id = score.beatmap_id,
+        scores_table = scores_table,
+        mode = score.play_mode,
+        rx = rx,
+        mods = score.mods,
+        old_pp = score.pp,
+        new_pp = new_pp,
+        changed = score.pp != new_pp_for_stats,
+        rows_affected = result.rows_affected();
+        "Updated score pp",
+    );
+
+    Ok(())
+}
+
 async fn recalculate_relax_scores(
     scores: Vec<LightweightScore>,
     mods: i32,
     scores_table: &str,
     beatmap: &Beatmap,
     ctx: Arc<Context>,
+    rx: i32,
+    run: &RecalculationRun,
 ) -> anyhow::Result<()> {
     let difficulty_attributes =
         akatsuki_pp_rs::osu_2019::stars::stars(&beatmap, (mods as u32).into(), None);
@@ -140,11 +257,7 @@ async fn recalculate_relax_scores(
             pp = 0.0;
         }
 
-        sqlx::query(&format!("UPDATE {} SET pp = ? WHERE id = ?", scores_table))
-            .bind(pp)
-            .bind(score.id)
-            .execute(ctx.database.get().await?.deref_mut())
-            .await?;
+        write_score_pp(&score, pp as f64, scores_table, rx, ctx.clone(), run).await?;
     }
 
     Ok(())
@@ -155,6 +268,8 @@ async fn recalculate_scores(
     scores_table: &str,
     beatmap: &Beatmap,
     ctx: Arc<Context>,
+    rx: i32,
+    run: &RecalculationRun,
 ) -> anyhow::Result<()> {
     let first_score = scores[0].clone();
 
@@ -181,11 +296,15 @@ async fn recalculate_scores(
         .accuracy(first_score.accuracy as f64)
         .calculate();
 
-    sqlx::query(&format!("UPDATE {} SET pp = ? WHERE id = ?", scores_table))
-        .bind(result.pp())
-        .bind(first_score.id)
-        .execute(ctx.database.get().await?.deref_mut())
-        .await?;
+    write_score_pp(
+        &first_score,
+        result.pp(),
+        scores_table,
+        rx,
+        ctx.clone(),
+        run,
+    )
+    .await?;
 
     let difficulty_attributes = result.difficulty_attributes();
 
@@ -219,11 +338,7 @@ async fn recalculate_scores(
             pp = 0.0;
         }
 
-        sqlx::query(&format!("UPDATE {} SET pp = ? WHERE id = ?", scores_table))
-            .bind(pp)
-            .bind(score.id)
-            .execute(ctx.database.get().await?.deref_mut())
-            .await?;
+        write_score_pp(score, pp as f64, scores_table, rx, ctx.clone(), run).await?;
     }
 
     Ok(())
@@ -236,11 +351,12 @@ async fn recalculate_beatmap(
     mode: i32,
     rx: i32,
     ctx: Arc<Context>,
+    run: RecalculationRun,
 ) -> anyhow::Result<()> {
     let score_conditions = filters.score_conditions(Some("s"));
 
     let scores: Vec<LightweightScore> = sqlx::query_as(&format!(
-        "SELECT s.id, s.mods, s.max_combo, s.play_mode, b.beatmap_id, s.pp, s.accuracy, s.misses_count
+        "SELECT s.id, s.userid, s.beatmap_md5, s.mods, s.max_combo, s.play_mode, b.beatmap_id, s.pp, s.accuracy, s.completed, s.misses_count
         FROM {} s
         INNER JOIN
             beatmaps b
@@ -274,9 +390,18 @@ async fn recalculate_beatmap(
 
     for (mods, mod_scores) in grouped_scores {
         if mode == 0 && rx == 1 {
-            recalculate_relax_scores(mod_scores, mods, scores_table, &beatmap, ctx.clone()).await?;
+            recalculate_relax_scores(
+                mod_scores,
+                mods,
+                scores_table,
+                &beatmap,
+                ctx.clone(),
+                rx,
+                &run,
+            )
+            .await?;
         } else {
-            recalculate_scores(mod_scores, scores_table, &beatmap, ctx.clone()).await?;
+            recalculate_scores(mod_scores, scores_table, &beatmap, ctx.clone(), rx, &run).await?;
         }
     }
 
@@ -284,7 +409,8 @@ async fn recalculate_beatmap(
         beatmap_id = base_score.beatmap_id,
         score_count = score_count,
         mode = mode,
-        rx = rx;
+        rx = rx,
+        dry_run = run.dry_run;
         "Recalculated beatmap"
     );
 
@@ -296,6 +422,7 @@ async fn recalculate_mode_scores(
     rx: i32,
     ctx: Arc<Context>,
     filters: &DeployFilters,
+    run: RecalculationRun,
 ) -> anyhow::Result<()> {
     let scores_table = match rx {
         0 => "scores",
@@ -350,7 +477,8 @@ async fn recalculate_mode_scores(
     log::info!(
         beatmaps = beatmap_md5s.len(),
         mode = mode,
-        rx = rx;
+        rx = rx,
+        dry_run = run.dry_run;
         "Starting beatmap recalculation"
     );
 
@@ -361,11 +489,13 @@ async fn recalculate_mode_scores(
         let semaphore = semaphore.clone();
         let ctx = ctx.clone();
         let filters = filters.clone();
+        let run = run.clone();
+        let dry_run = run.dry_run;
 
         let permit = semaphore.acquire_owned().await?;
 
         futures.push(tokio::spawn(async move {
-            recalculate_beatmap(beatmap_md5, scores_table, filters, mode, rx, ctx).await?;
+            recalculate_beatmap(beatmap_md5, scores_table, filters, mode, rx, ctx, run).await?;
             beatmaps_processed += 1;
 
             drop(permit);
@@ -375,6 +505,7 @@ async fn recalculate_mode_scores(
                     beatmaps_left = total_beatmaps - beatmaps_processed as usize,
                     mode = mode,
                     rx = rx,
+                    dry_run = dry_run,
                     beatmaps_processed = beatmaps_processed;
                     "Beatmap recalculation progress",
                 );
@@ -395,7 +526,8 @@ async fn recalculate_mode_scores(
 
     log::info!(
         mode = mode,
-        rx = rx;
+        rx = rx,
+        dry_run = run.dry_run;
         "Beatmap recalculation finished"
     );
 
@@ -421,6 +553,7 @@ async fn recalculate_status(
     rx: i32,
     beatmap_md5: String,
     ctx: Arc<Context>,
+    run: &RecalculationRun,
 ) -> anyhow::Result<()> {
     let scores_table = match rx {
         0 => "scores",
@@ -429,38 +562,116 @@ async fn recalculate_status(
         _ => unreachable!(),
     };
 
-    let scores: Vec<(i64, f32)> = sqlx::query_as(
+    let mut scores: Vec<ScoreStatus> = sqlx::query_as(
         &format!(
-            "SELECT id, pp FROM {} WHERE userid = ? AND play_mode = ? AND beatmap_md5 = ? AND completed IN (2, 3) ORDER BY pp DESC",
+            "SELECT id, pp, completed FROM {} WHERE userid = ? AND play_mode = ? AND beatmap_md5 = ? AND completed IN (2, 3) ORDER BY pp DESC",
             scores_table
         )
     )
     .bind(user_id)
     .bind(mode)
-    .bind(beatmap_md5)
+    .bind(&beatmap_md5)
     .fetch_all(ctx.database.get().await?.deref_mut())
     .await?;
 
-    let best_id = scores[0].0;
+    if run.dry_run {
+        for score in &mut scores {
+            if let Some(planned_pp) = run.score_pp(score.id).await {
+                score.pp = planned_pp;
+            }
+        }
+
+        scores.sort_by(|a, b| b.pp.partial_cmp(&a.pp).unwrap_or(Ordering::Equal));
+    }
+
+    let best_id = scores[0].id;
     let non_bests = scores[1..].to_vec();
 
-    sqlx::query(&format!(
-        "UPDATE {} SET completed = 3 WHERE id = ?",
-        scores_table
-    ))
-    .bind(best_id)
-    .execute(ctx.database.get().await?.deref_mut())
+    write_score_completed(
+        scores_table,
+        user_id,
+        mode,
+        rx,
+        beatmap_md5.as_str(),
+        best_id,
+        scores[0].completed,
+        3,
+        ctx.clone(),
+        run,
+    )
     .await?;
 
     for non_best in non_bests {
-        sqlx::query(&format!(
-            "UPDATE {} SET completed = 2 WHERE id = ?",
-            scores_table
-        ))
-        .bind(non_best.0)
-        .execute(ctx.database.get().await?.deref_mut())
+        write_score_completed(
+            scores_table,
+            user_id,
+            mode,
+            rx,
+            beatmap_md5.as_str(),
+            non_best.id,
+            non_best.completed,
+            2,
+            ctx.clone(),
+            run,
+        )
         .await?;
     }
+
+    Ok(())
+}
+
+async fn write_score_completed(
+    scores_table: &str,
+    user_id: i32,
+    mode: i32,
+    rx: i32,
+    beatmap_md5: &str,
+    score_id: i64,
+    old_completed: i32,
+    new_completed: i32,
+    ctx: Arc<Context>,
+    run: &RecalculationRun,
+) -> anyhow::Result<()> {
+    if run.dry_run {
+        run.record_completed(score_id, new_completed).await;
+        log::info!(
+            score_id = score_id,
+            user_id = user_id,
+            beatmap_md5 = beatmap_md5,
+            scores_table = scores_table,
+            mode = mode,
+            rx = rx,
+            old_completed = old_completed,
+            new_completed = new_completed,
+            changed = old_completed != new_completed;
+            "Dry run would update score status",
+        );
+
+        return Ok(());
+    }
+
+    let result = sqlx::query(&format!(
+        "UPDATE {} SET completed = ? WHERE id = ?",
+        scores_table
+    ))
+    .bind(new_completed)
+    .bind(score_id)
+    .execute(ctx.database.get().await?.deref_mut())
+    .await?;
+
+    log::info!(
+        score_id = score_id,
+        user_id = user_id,
+        beatmap_md5 = beatmap_md5,
+        scores_table = scores_table,
+        mode = mode,
+        rx = rx,
+        old_completed = old_completed,
+        new_completed = new_completed,
+        changed = old_completed != new_completed,
+        rows_affected = result.rows_affected();
+        "Updated score status",
+    );
 
     Ok(())
 }
@@ -471,6 +682,7 @@ async fn recalculate_statuses(
     rx: i32,
     ctx: Arc<Context>,
     filters: &DeployFilters,
+    run: &RecalculationRun,
 ) -> anyhow::Result<()> {
     let scores_table = match rx {
         0 => "scores",
@@ -528,7 +740,7 @@ async fn recalculate_statuses(
     };
 
     for (beatmap_md5,) in beatmap_md5s {
-        recalculate_status(user_id, mode, rx, beatmap_md5, ctx.clone()).await?;
+        recalculate_status(user_id, mode, rx, beatmap_md5, ctx.clone(), run).await?;
     }
 
     Ok(())
@@ -540,8 +752,9 @@ async fn recalculate_user(
     rx: i32,
     ctx: Arc<Context>,
     filters: &DeployFilters,
+    run: &RecalculationRun,
 ) -> anyhow::Result<()> {
-    recalculate_statuses(user_id, mode, rx, ctx.clone(), filters).await?;
+    recalculate_statuses(user_id, mode, rx, ctx.clone(), filters, run).await?;
 
     let scores_table = match rx {
         0 => "scores",
@@ -550,49 +763,118 @@ async fn recalculate_user(
         _ => unreachable!(),
     };
 
-    let scores: Vec<LightweightScore> = sqlx::query_as(
-        &format!(
-            "SELECT s.id, s.mods, s.max_combo, s.play_mode, b.beatmap_id, s.pp, s.accuracy, s.misses_count
-            FROM {} s
-            INNER JOIN
-                beatmaps b
-                USING(beatmap_md5)
-            WHERE
-                userid = ?
-                AND completed = 3
-                AND play_mode = ?
-                AND ranked IN (3, 2)
-            ORDER BY pp DESC
-            LIMIT 100",
-            scores_table
+    let (scores, score_count) = if run.dry_run {
+        let mut scores: Vec<LightweightScore> = sqlx::query_as(
+            &format!(
+                "SELECT s.id, s.userid, s.beatmap_md5, s.mods, s.max_combo, s.play_mode, b.beatmap_id, s.pp, s.accuracy, s.completed, s.misses_count
+                FROM {} s
+                INNER JOIN
+                    beatmaps b
+                    USING(beatmap_md5)
+                WHERE
+                    userid = ?
+                    AND completed IN (2, 3)
+                    AND play_mode = ?
+                    AND ranked IN (3, 2)",
+                scores_table
+            )
         )
-    )
-    .bind(user_id)
-    .bind(mode)
-    .fetch_all(ctx.database.get().await?.deref_mut())
-    .await?;
-
-    let score_count: i32 = sqlx::query_scalar(
-        &format!(
-            "SELECT COUNT(s.id) FROM {} s INNER JOIN beatmaps USING(beatmap_md5) WHERE userid = ? AND completed = 3 AND play_mode = ? AND ranked IN (3, 2) LIMIT 1000",
-            scores_table
-        )
-    )
         .bind(user_id)
         .bind(mode)
-        .fetch_one(ctx.database.get().await?.deref_mut())
+        .fetch_all(ctx.database.get().await?.deref_mut())
         .await?;
+
+        for score in &mut scores {
+            if let Some(planned_pp) = run.score_pp(score.id).await {
+                score.pp = planned_pp;
+            }
+
+            if let Some(planned_completed) = run.completed(score.id).await {
+                score.completed = planned_completed;
+            }
+        }
+
+        let mut best_scores = scores
+            .into_iter()
+            .filter(|score| score.completed == 3)
+            .collect::<Vec<_>>();
+        best_scores.sort_by(|a, b| b.pp.partial_cmp(&a.pp).unwrap_or(Ordering::Equal));
+
+        let score_count = best_scores.len() as i32;
+        best_scores.truncate(100);
+
+        (best_scores, score_count)
+    } else {
+        let scores: Vec<LightweightScore> = sqlx::query_as(
+            &format!(
+                "SELECT s.id, s.userid, s.beatmap_md5, s.mods, s.max_combo, s.play_mode, b.beatmap_id, s.pp, s.accuracy, s.completed, s.misses_count
+                FROM {} s
+                INNER JOIN
+                    beatmaps b
+                    USING(beatmap_md5)
+                WHERE
+                    userid = ?
+                    AND completed = 3
+                    AND play_mode = ?
+                    AND ranked IN (3, 2)
+                ORDER BY pp DESC
+                LIMIT 100",
+                scores_table
+            )
+        )
+        .bind(user_id)
+        .bind(mode)
+        .fetch_all(ctx.database.get().await?.deref_mut())
+        .await?;
+
+        let score_count: i32 = sqlx::query_scalar(
+            &format!(
+                "SELECT COUNT(s.id) FROM {} s INNER JOIN beatmaps USING(beatmap_md5) WHERE userid = ? AND completed = 3 AND play_mode = ? AND ranked IN (3, 2) LIMIT 1000",
+                scores_table
+            )
+        )
+            .bind(user_id)
+            .bind(mode)
+            .fetch_one(ctx.database.get().await?.deref_mut())
+            .await?;
+
+        (scores, score_count)
+    };
 
     let new_pp = calculate_new_pp(&scores, score_count);
 
-    sqlx::query(&format!(
-        "UPDATE user_stats SET pp = ? WHERE user_id = ? AND mode = ?",
-    ))
-    .bind(new_pp)
-    .bind(user_id)
-    .bind(mode + (4 * rx))
-    .execute(ctx.database.get().await?.deref_mut())
-    .await?;
+    let stats_mode = mode + (4 * rx);
+    if run.dry_run {
+        log::info!(
+            user_id = user_id,
+            mode = mode,
+            rx = rx,
+            stats_mode = stats_mode,
+            new_pp = new_pp,
+            score_count = score_count;
+            "Dry run would update user total pp",
+        );
+    } else {
+        let result = sqlx::query(&format!(
+            "UPDATE user_stats SET pp = ? WHERE user_id = ? AND mode = ?",
+        ))
+        .bind(new_pp)
+        .bind(user_id)
+        .bind(stats_mode)
+        .execute(ctx.database.get().await?.deref_mut())
+        .await?;
+
+        log::info!(
+            user_id = user_id,
+            mode = mode,
+            rx = rx,
+            stats_mode = stats_mode,
+            new_pp = new_pp,
+            score_count = score_count,
+            rows_affected = result.rows_affected();
+            "Updated user total pp",
+        );
+    }
 
     let (country, user_privileges): (String, i32) =
         sqlx::query_as("SELECT country, privileges FROM users WHERE id = ?")
@@ -624,8 +906,6 @@ async fn recalculate_user(
         None => 60,
     };
 
-    let mut redis_connection = ctx.redis.get_multiplexed_async_connection().await?;
-
     // unrestricted, and set a score in the past 2 months
     if user_privileges & 1 > 0 && inactive_days < 60 {
         let redis_leaderboard = match rx {
@@ -643,31 +923,79 @@ async fn recalculate_user(
             _ => unreachable!(),
         };
 
-        let _: () = redis_connection
-            .zadd(
-                format!("ripple:{}:{}", redis_leaderboard, stats_prefix),
-                user_id.to_string(),
-                new_pp,
-            )
-            .await?;
+        let global_key = format!("ripple:{}:{}", redis_leaderboard, stats_prefix);
+        let country_key = format!(
+            "ripple:{}:{}:{}",
+            redis_leaderboard,
+            stats_prefix,
+            country.to_lowercase()
+        );
 
-        let _: () = redis_connection
-            .zadd(
-                format!(
-                    "ripple:{}:{}:{}",
-                    redis_leaderboard,
-                    stats_prefix,
-                    country.to_lowercase()
-                ),
-                user_id.to_string(),
-                new_pp,
-            )
-            .await?;
+        if run.dry_run {
+            log::info!(
+                user_id = user_id,
+                mode = mode,
+                rx = rx,
+                redis_key = global_key.as_str(),
+                new_pp = new_pp;
+                "Dry run would update Redis leaderboard",
+            );
+            log::info!(
+                user_id = user_id,
+                mode = mode,
+                rx = rx,
+                redis_key = country_key.as_str(),
+                new_pp = new_pp;
+                "Dry run would update Redis leaderboard",
+            );
+        } else {
+            let mut redis_connection = ctx.redis.get_multiplexed_async_connection().await?;
+
+            let _: () = redis_connection
+                .zadd(global_key.as_str(), user_id.to_string(), new_pp)
+                .await?;
+            log::info!(
+                user_id = user_id,
+                mode = mode,
+                rx = rx,
+                redis_key = global_key.as_str(),
+                new_pp = new_pp;
+                "Updated Redis leaderboard",
+            );
+
+            let _: () = redis_connection
+                .zadd(country_key.as_str(), user_id.to_string(), new_pp)
+                .await?;
+            log::info!(
+                user_id = user_id,
+                mode = mode,
+                rx = rx,
+                redis_key = country_key.as_str(),
+                new_pp = new_pp;
+                "Updated Redis leaderboard",
+            );
+        }
     }
 
-    let _: () = redis_connection
-        .publish("peppy:update_cached_stats", user_id)
-        .await?;
+    if run.dry_run {
+        log::info!(
+            user_id = user_id,
+            mode = mode,
+            rx = rx;
+            "Dry run would publish cached stats update",
+        );
+    } else {
+        let mut redis_connection = ctx.redis.get_multiplexed_async_connection().await?;
+        let _: () = redis_connection
+            .publish("peppy:update_cached_stats", user_id)
+            .await?;
+        log::info!(
+            user_id = user_id,
+            mode = mode,
+            rx = rx;
+            "Published cached stats update",
+        );
+    }
 
     Ok(())
 }
@@ -678,6 +1006,7 @@ async fn recalculate_mode_users(
     ctx: Arc<Context>,
     filters: &DeployFilters,
     affected_user_ids: Option<Vec<i32>>,
+    run: RecalculationRun,
 ) -> anyhow::Result<()> {
     let user_ids: Vec<i32> = if let Some(user_ids) = affected_user_ids {
         user_ids
@@ -699,11 +1028,12 @@ async fn recalculate_mode_users(
             let semaphore = semaphore.clone();
             let ctx = ctx.clone();
             let filters = status_filters.clone();
+            let run = run.clone();
 
             let permit = semaphore.acquire_owned().await?;
 
             futures.push(tokio::spawn(async move {
-                recalculate_user(user_id, mode, rx, ctx, &filters).await?;
+                recalculate_user(user_id, mode, rx, ctx, &filters, &run).await?;
                 drop(permit);
                 Ok::<(), anyhow::Error>(())
             }))
@@ -724,6 +1054,7 @@ async fn recalculate_mode_users(
             users_left = user_ids.len().saturating_sub(users_recalculated),
             mode = mode,
             rx = rx,
+            dry_run = run.dry_run,
             users_recalculated = users_recalculated;
             "Processed users",
         );
@@ -872,7 +1203,7 @@ fn recalculation_scopes(deploy_args: &DeployArgs) -> Vec<(i32, i32)> {
     scopes
 }
 
-async fn dry_run_recalculation(deploy_args: &DeployArgs, ctx: Arc<Context>) -> anyhow::Result<()> {
+async fn preview_recalculation(deploy_args: &DeployArgs, ctx: Arc<Context>) -> anyhow::Result<()> {
     for (mode, rx) in recalculation_scopes(deploy_args) {
         let (matching_scores, matching_beatmaps) =
             count_matching_scores_and_beatmaps(mode, rx, ctx.clone(), &deploy_args.filters).await?;
@@ -894,11 +1225,13 @@ async fn dry_run_recalculation(deploy_args: &DeployArgs, ctx: Arc<Context>) -> a
             matching_scores = matching_scores,
             matching_beatmaps = matching_beatmaps,
             affected_users = affected_users;
-            "Dry run recalculation scope",
+            "Preview recalculation scope",
         );
     }
 
-    log::info!("Dry run complete; no score, stats, leaderboard, or cache updates were performed");
+    log::info!(
+        "Preview complete; no score, status, stats, leaderboard, or cache work was performed"
+    );
 
     Ok(())
 }
@@ -908,6 +1241,7 @@ struct DeployArgs {
     relax_bits: Vec<i32>,
     total_pp_only: bool,
     total_pp: bool,
+    preview: bool,
     dry_run: bool,
     filters: DeployFilters,
 }
@@ -953,6 +1287,11 @@ fn deploy_args_from_env() -> anyhow::Result<DeployArgs> {
     let relax_bits_str = std::env::var("DEPLOY_RELAX_BITS")?;
     let total_pp_only_str = std::env::var("DEPLOY_TOTAL_PP_ONLY").unwrap_or("".to_string());
     let total_pp_str = std::env::var("DEPLOY_TOTAL_PP").unwrap_or("".to_string());
+    let preview = std::env::var("DEPLOY_PREVIEW")
+        .unwrap_or_default()
+        .to_lowercase()
+        .trim()
+        == "1";
     let dry_run = std::env::var("DEPLOY_DRY_RUN")
         .unwrap_or_default()
         .to_lowercase()
@@ -969,6 +1308,12 @@ fn deploy_args_from_env() -> anyhow::Result<DeployArgs> {
         == "1";
     let after_time = deploy_after_time_from_env()?;
 
+    if preview && dry_run {
+        return Err(anyhow!(
+            "DEPLOY_PREVIEW and DEPLOY_DRY_RUN cannot both be set"
+        ));
+    }
+
     Ok(DeployArgs {
         modes: modes_str
             .trim()
@@ -982,6 +1327,7 @@ fn deploy_args_from_env() -> anyhow::Result<DeployArgs> {
             .collect::<Vec<_>>(),
         total_pp_only: total_pp_only_str.to_lowercase().trim() == "1",
         total_pp: total_pp_str.to_lowercase().trim() == "1",
+        preview,
         dry_run,
         filters: DeployFilters {
             mods_filter: mods_filter_str
@@ -1164,6 +1510,7 @@ fn deploy_args_from_input() -> anyhow::Result<DeployArgs> {
         relax_bits,
         total_pp_only: total_only,
         total_pp: total,
+        preview: false,
         dry_run: false,
         filters: DeployFilters {
             mods_filter: mods_value,
@@ -1176,10 +1523,10 @@ fn deploy_args_from_input() -> anyhow::Result<DeployArgs> {
 }
 
 fn retrieve_deploy_args() -> anyhow::Result<DeployArgs> {
-    let env_deploy_args = deploy_args_from_env();
+    let env_requested = std::env::vars().any(|(key, _)| key.starts_with("DEPLOY_"));
 
-    if let Ok(deploy_args) = env_deploy_args {
-        Ok(deploy_args)
+    if env_requested {
+        deploy_args_from_env()
     } else {
         deploy_args_from_input()
     }
@@ -1190,10 +1537,15 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
 
     let context_arc = Arc::new(context);
     let mut affected_users_by_scope = HashMap::new();
+    let run = RecalculationRun::new(deploy_args.dry_run);
 
-    if deploy_args.dry_run {
-        dry_run_recalculation(&deploy_args, context_arc).await?;
+    if deploy_args.preview {
+        preview_recalculation(&deploy_args, context_arc).await?;
         return Ok(());
+    }
+
+    if run.dry_run {
+        log::info!("Dry run started; score, status, stats, leaderboard, and cache writes will be logged but not performed");
     }
 
     if !deploy_args.total_pp_only {
@@ -1221,6 +1573,7 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
                         rx.clone(),
                         context_arc.clone(),
                         &deploy_args.filters,
+                        run.clone(),
                     )
                     .await?;
                 }
@@ -1232,12 +1585,22 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
                     affected_users_by_scope.insert((mode, 0), affected_user_ids);
                 }
 
-                recalculate_mode_scores(mode, 0, context_arc.clone(), &deploy_args.filters).await?;
+                recalculate_mode_scores(
+                    mode,
+                    0,
+                    context_arc.clone(),
+                    &deploy_args.filters,
+                    run.clone(),
+                )
+                .await?;
             }
         }
     }
 
     if !deploy_args.total_pp {
+        if run.dry_run {
+            log::info!("Dry run complete; no score, status, stats, leaderboard, or cache writes were performed");
+        }
         return Ok(());
     }
 
@@ -1273,6 +1636,7 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
                     context_arc.clone(),
                     &deploy_args.filters,
                     affected_user_ids,
+                    run.clone(),
                 )
                 .await?;
             }
@@ -1296,9 +1660,14 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
                 context_arc.clone(),
                 &deploy_args.filters,
                 affected_user_ids,
+                run.clone(),
             )
             .await?;
         }
+    }
+
+    if run.dry_run {
+        log::info!("Dry run complete; no score, status, stats, leaderboard, or cache writes were performed");
     }
 
     Ok(())
