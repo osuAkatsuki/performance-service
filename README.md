@@ -114,7 +114,7 @@ APP_COMPONENT=deploy cargo run --release
 | `DEPLOY_TOTAL_PP_ONLY` | Set to `1` to skip Phase 1 (score PP recalc) | `0` |
 | `DEPLOY_TOTAL_PP` | Set to `1` to run Phase 2 (user total PP aggregation) | `1` |
 | `DEPLOY_PREVIEW` | Set to `1` to log matching score/beatmap/user counts without updates | `1` |
-| `DEPLOY_DRY_RUN` | Set to `1` to calculate and log each write without performing it | `1` |
+| `DEPLOY_DRY_RUN` | Set to `1` to calculate and log each write without performing it; combined score+total dry-runs are capped at 100k planned score PP values | `1` |
 | `DEPLOY_MODS_FILTER` | Only scores WITH these mods (bitmask) | `64` (DT) |
 | `DEPLOY_NEQ_MODS_FILTER` | Only scores WITHOUT these mods | `64` |
 | `DEPLOY_MAPPER_FILTER` | Filter by mapper name (fuzzy) | `Sotarks` |

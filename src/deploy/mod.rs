@@ -40,15 +40,14 @@ struct ScoreStatus {
 struct RecalculationRun {
     dry_run: bool,
     dry_run_score_pp: Option<Arc<Mutex<HashMap<i64, f32>>>>,
-    dry_run_completed: Option<Arc<Mutex<HashMap<i64, i32>>>>,
 }
 
 impl RecalculationRun {
-    fn new(dry_run: bool) -> Self {
+    fn new(dry_run: bool, track_score_pp: bool) -> Self {
         Self {
             dry_run,
-            dry_run_score_pp: dry_run.then(|| Arc::new(Mutex::new(HashMap::new()))),
-            dry_run_completed: dry_run.then(|| Arc::new(Mutex::new(HashMap::new()))),
+            dry_run_score_pp: (dry_run && track_score_pp)
+                .then(|| Arc::new(Mutex::new(HashMap::new()))),
         }
     }
 
@@ -58,29 +57,12 @@ impl RecalculationRun {
         }
     }
 
-    async fn record_completed(&self, score_id: i64, completed: i32) {
-        if let Some(completed_by_score_id) = &self.dry_run_completed {
-            completed_by_score_id
-                .lock()
-                .await
-                .insert(score_id, completed);
-        }
-    }
-
     async fn score_pp(&self, score_id: i64) -> Option<f32> {
         let Some(score_pp) = &self.dry_run_score_pp else {
             return None;
         };
 
         score_pp.lock().await.get(&score_id).copied()
-    }
-
-    async fn completed(&self, score_id: i64) -> Option<i32> {
-        let Some(completed_by_score_id) = &self.dry_run_completed else {
-            return None;
-        };
-
-        completed_by_score_id.lock().await.get(&score_id).copied()
     }
 }
 
@@ -92,6 +74,7 @@ fn round(x: f32, decimals: u32) -> f32 {
 const MAX_CONCURRENT_BEATMAP_TASKS: usize = 10;
 const MAX_CONCURRENT_TASKS: usize = 100;
 const BATCH_SIZE: u32 = 1000;
+const MAX_DRY_RUN_TRACKED_SCORE_PPS: i64 = 100_000;
 
 #[derive(Clone, Default)]
 struct DeployFilters {
@@ -554,7 +537,7 @@ async fn recalculate_status(
     beatmap_md5: String,
     ctx: Arc<Context>,
     run: &RecalculationRun,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<Vec<(i64, i32)>> {
     let scores_table = match rx {
         0 => "scores",
         1 => "scores_relax",
@@ -586,6 +569,7 @@ async fn recalculate_status(
 
     let best_id = scores[0].id;
     let non_bests = scores[1..].to_vec();
+    let mut planned_completed = Vec::new();
 
     write_score_completed(
         scores_table,
@@ -600,6 +584,7 @@ async fn recalculate_status(
         run,
     )
     .await?;
+    planned_completed.push((best_id, 3));
 
     for non_best in non_bests {
         write_score_completed(
@@ -615,9 +600,10 @@ async fn recalculate_status(
             run,
         )
         .await?;
+        planned_completed.push((non_best.id, 2));
     }
 
-    Ok(())
+    Ok(planned_completed)
 }
 
 async fn write_score_completed(
@@ -633,7 +619,6 @@ async fn write_score_completed(
     run: &RecalculationRun,
 ) -> anyhow::Result<()> {
     if run.dry_run {
-        run.record_completed(score_id, new_completed).await;
         log::info!(
             score_id = score_id,
             user_id = user_id,
@@ -683,7 +668,7 @@ async fn recalculate_statuses(
     ctx: Arc<Context>,
     filters: &DeployFilters,
     run: &RecalculationRun,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<HashMap<i64, i32>> {
     let scores_table = match rx {
         0 => "scores",
         1 => "scores_relax",
@@ -739,11 +724,19 @@ async fn recalculate_statuses(
             .await?
     };
 
+    let mut planned_completed = HashMap::new();
+
     for (beatmap_md5,) in beatmap_md5s {
-        recalculate_status(user_id, mode, rx, beatmap_md5, ctx.clone(), run).await?;
+        for (score_id, completed) in
+            recalculate_status(user_id, mode, rx, beatmap_md5, ctx.clone(), run).await?
+        {
+            if run.dry_run {
+                planned_completed.insert(score_id, completed);
+            }
+        }
     }
 
-    Ok(())
+    Ok(planned_completed)
 }
 
 async fn recalculate_user(
@@ -754,7 +747,8 @@ async fn recalculate_user(
     filters: &DeployFilters,
     run: &RecalculationRun,
 ) -> anyhow::Result<()> {
-    recalculate_statuses(user_id, mode, rx, ctx.clone(), filters, run).await?;
+    let planned_completed =
+        recalculate_statuses(user_id, mode, rx, ctx.clone(), filters, run).await?;
 
     let scores_table = match rx {
         0 => "scores",
@@ -789,8 +783,8 @@ async fn recalculate_user(
                 score.pp = planned_pp;
             }
 
-            if let Some(planned_completed) = run.completed(score.id).await {
-                score.completed = planned_completed;
+            if let Some(planned_completed) = planned_completed.get(&score.id) {
+                score.completed = *planned_completed;
             }
         }
 
@@ -1236,6 +1230,40 @@ async fn preview_recalculation(deploy_args: &DeployArgs, ctx: Arc<Context>) -> a
     Ok(())
 }
 
+fn dry_run_tracks_score_pp(deploy_args: &DeployArgs) -> bool {
+    deploy_args.dry_run && deploy_args.total_pp && !deploy_args.total_pp_only
+}
+
+async fn validate_dry_run_tracking(
+    deploy_args: &DeployArgs,
+    ctx: Arc<Context>,
+) -> anyhow::Result<()> {
+    if !dry_run_tracks_score_pp(deploy_args) {
+        return Ok(());
+    }
+
+    let mut matching_scores = 0;
+    for (mode, rx) in recalculation_scopes(deploy_args) {
+        let (scope_scores, _) =
+            count_matching_scores_and_beatmaps(mode, rx, ctx.clone(), &deploy_args.filters).await?;
+        matching_scores += scope_scores;
+    }
+
+    if matching_scores > MAX_DRY_RUN_TRACKED_SCORE_PPS {
+        return Err(anyhow!(
+            "DEPLOY_DRY_RUN would need to retain {matching_scores} planned score PP values to simulate user totals; limit is {MAX_DRY_RUN_TRACKED_SCORE_PPS}. Use DEPLOY_PREVIEW=1, narrow the score filters, or dry-run the score and total-PP phases separately."
+        ));
+    }
+
+    log::info!(
+        matching_scores = matching_scores,
+        max_tracked_score_pp = MAX_DRY_RUN_TRACKED_SCORE_PPS;
+        "Dry run will retain planned score PP values for user-total simulation",
+    );
+
+    Ok(())
+}
+
 struct DeployArgs {
     modes: Vec<i32>,
     relax_bits: Vec<i32>,
@@ -1537,12 +1565,14 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
 
     let context_arc = Arc::new(context);
     let mut affected_users_by_scope = HashMap::new();
-    let run = RecalculationRun::new(deploy_args.dry_run);
+    let run = RecalculationRun::new(deploy_args.dry_run, dry_run_tracks_score_pp(&deploy_args));
 
     if deploy_args.preview {
         preview_recalculation(&deploy_args, context_arc).await?;
         return Ok(());
     }
+
+    validate_dry_run_tracking(&deploy_args, context_arc.clone()).await?;
 
     if run.dry_run {
         log::info!("Dry run started; score, status, stats, leaderboard, and cache writes will be logged but not performed");

@@ -65,6 +65,13 @@ and skips the actual DB, Redis leaderboard, and cache publish writes. This can
 produce a large log for broad recalculations. Do not set `DEPLOY_PREVIEW=1` and
 `DEPLOY_DRY_RUN=1` together.
 
+When a dry run includes both score recalculation and user total aggregation, the
+service keeps planned score PP values in memory so the user-total logs reflect
+the execute path. That dry-run mode fails before recalculation if it would need
+to retain more than 100,000 planned score PP values. Use `DEPLOY_PREVIEW=1`,
+narrow the filters, or dry-run the score and total-PP phases separately for
+larger scopes.
+
 ### Compose Examples
 
 ```bash
@@ -355,7 +362,7 @@ If you know approximately which beatmaps were already processed, you could use `
 | `DEPLOY_TOTAL_PP_ONLY` | `1` = skip score PP recalc, only aggregate user totals | `0` |
 | `DEPLOY_TOTAL_PP` | `1` = run user total PP aggregation | `1` |
 | `DEPLOY_PREVIEW` | `1` = log matching score/beatmap/user counts without updates | `1` |
-| `DEPLOY_DRY_RUN` | `1` = calculate and log each write without performing it | `1` |
+| `DEPLOY_DRY_RUN` | `1` = calculate and log each write without performing it; combined score+total dry-runs are capped at 100k planned score PP values | `1` |
 | `DEPLOY_MODS_FILTER` | Only scores WITH these mods (bitmask) | `64` (DT) |
 | `DEPLOY_NEQ_MODS_FILTER` | Only scores WITHOUT these mods (bitmask) | `64` |
 | `DEPLOY_MAPPER_FILTER` | Filter by mapper name (fuzzy match) | `Sotarks` |
