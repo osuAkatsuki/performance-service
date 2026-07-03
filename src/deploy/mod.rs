@@ -33,6 +33,76 @@ const MAX_CONCURRENT_BEATMAP_TASKS: usize = 10;
 const MAX_CONCURRENT_TASKS: usize = 100;
 const BATCH_SIZE: u32 = 1000;
 
+#[derive(Clone, Default)]
+struct DeployFilters {
+    mods_filter: Option<i32>,
+    neq_mods_filter: Option<i32>,
+    mapper_filter: Option<String>,
+    map_filter: Option<Vec<i32>>,
+    pp_zero: bool,
+    after_time: Option<i32>,
+}
+
+impl DeployFilters {
+    fn score_column(alias: Option<&str>, column: &str) -> String {
+        if let Some(alias) = alias {
+            format!("{alias}.{column}")
+        } else {
+            column.to_string()
+        }
+    }
+
+    fn score_conditions(&self, alias: Option<&str>) -> String {
+        let mut conditions = Vec::new();
+
+        if let Some(mods_value) = self.mods_filter {
+            conditions.push(format!(
+                "({} & {}) > 0",
+                Self::score_column(alias, "mods"),
+                mods_value
+            ));
+        } else if let Some(neq_mods_value) = self.neq_mods_filter {
+            conditions.push(format!(
+                "({} & {}) = 0",
+                Self::score_column(alias, "mods"),
+                neq_mods_value
+            ));
+        }
+
+        if self.pp_zero {
+            conditions.push(format!("{} = 0", Self::score_column(alias, "pp")));
+        }
+
+        if let Some(after_time) = self.after_time {
+            conditions.push(format!(
+                "{} >= {}",
+                Self::score_column(alias, "time"),
+                after_time
+            ));
+        }
+
+        if conditions.is_empty() {
+            "".to_string()
+        } else {
+            format!("AND {}", conditions.join(" AND "))
+        }
+    }
+
+    fn score_selection_is_targeted(&self) -> bool {
+        self.pp_zero || self.after_time.is_some()
+    }
+
+    fn status_filters(&self) -> Self {
+        let mut filters = self.clone();
+
+        // If pp=0 scores were just repaired, filtering status recalculation by
+        // pp=0 would miss the beatmaps that need best-score repair.
+        filters.pp_zero = false;
+
+        filters
+    }
+}
+
 fn group_scores_by_mods(vec: Vec<LightweightScore>) -> HashMap<i32, Vec<LightweightScore>> {
     let mut grouped_map = HashMap::new();
 
@@ -162,11 +232,13 @@ async fn recalculate_scores(
 async fn recalculate_beatmap(
     beatmap_md5: String,
     scores_table: &str,
-    mods_query_str: String,
+    filters: DeployFilters,
     mode: i32,
     rx: i32,
     ctx: Arc<Context>,
 ) -> anyhow::Result<()> {
+    let score_conditions = filters.score_conditions(Some("s"));
+
     let scores: Vec<LightweightScore> = sqlx::query_as(&format!(
         "SELECT s.id, s.mods, s.max_combo, s.play_mode, b.beatmap_id, s.pp, s.accuracy, s.misses_count
         FROM {} s
@@ -179,7 +251,7 @@ async fn recalculate_beatmap(
             AND s.beatmap_md5 = ?
             {}
         ORDER BY pp DESC",
-        scores_table, mods_query_str,
+        scores_table, score_conditions,
     ))
     .bind(mode)
     .bind(beatmap_md5)
@@ -223,10 +295,7 @@ async fn recalculate_mode_scores(
     mode: i32,
     rx: i32,
     ctx: Arc<Context>,
-    mods_value: Option<i32>,
-    neq_mods_value: Option<i32>,
-    mapper_filter: Option<String>,
-    map_filter: Option<Vec<i32>>,
+    filters: &DeployFilters,
 ) -> anyhow::Result<()> {
     let scores_table = match rx {
         0 => "scores",
@@ -235,25 +304,19 @@ async fn recalculate_mode_scores(
         _ => unreachable!(),
     };
 
-    let mods_query_str = if let Some(mods_value) = mods_value {
-        format!("AND (mods & {}) > 0", mods_value)
-    } else if let Some(neq_mods_value) = neq_mods_value {
-        format!("AND (mods & {}) = 0", neq_mods_value)
-    } else {
-        "".to_string()
-    };
+    let score_conditions = filters.score_conditions(Some("s"));
 
-    let beatmap_md5s: Vec<(String,)> = if let Some(mapper_filter) = mapper_filter {
+    let beatmap_md5s: Vec<(String,)> = if let Some(mapper_filter) = &filters.mapper_filter {
         sqlx::query_as(&format!(
-            "SELECT beatmap_md5, COUNT(*) AS c FROM {} INNER JOIN beatmaps USING(beatmap_md5) 
-            WHERE completed IN (2, 3) AND play_mode = ? {} AND beatmaps.file_name LIKE ? GROUP BY beatmap_md5 ORDER BY c DESC",
-            scores_table, mods_query_str,
+            "SELECT s.beatmap_md5, COUNT(*) AS c FROM {} s INNER JOIN beatmaps b USING(beatmap_md5)
+            WHERE s.completed IN (2, 3) AND s.play_mode = ? {} AND b.file_name LIKE ? GROUP BY s.beatmap_md5 ORDER BY c DESC",
+            scores_table, score_conditions,
         ))
         .bind(mode)
         .bind(format!("%({mapper_filter})%"))
         .fetch_all(ctx.database.get().await?.deref_mut())
         .await?
-    } else if let Some(map_filter) = map_filter {
+    } else if let Some(map_filter) = &filters.map_filter {
         let formatted_beatmap_ids = format!(
             "({})",
             map_filter
@@ -263,17 +326,17 @@ async fn recalculate_mode_scores(
                 .join(",")
         );
         sqlx::query_as(&format!(
-            "SELECT beatmap_md5, COUNT(*) AS c FROM {} INNER JOIN beatmaps USING(beatmap_md5) 
-            WHERE completed IN (2, 3) AND play_mode = ? {} AND beatmaps.beatmap_id IN {} GROUP BY beatmap_md5 ORDER BY c DESC",
-            scores_table, mods_query_str, formatted_beatmap_ids
+            "SELECT s.beatmap_md5, COUNT(*) AS c FROM {} s INNER JOIN beatmaps b USING(beatmap_md5)
+            WHERE s.completed IN (2, 3) AND s.play_mode = ? {} AND b.beatmap_id IN {} GROUP BY s.beatmap_md5 ORDER BY c DESC",
+            scores_table, score_conditions, formatted_beatmap_ids
         ))
         .bind(mode)
         .fetch_all(ctx.database.get().await?.deref_mut())
         .await?
     } else {
         sqlx::query_as(&format!(
-            "SELECT beatmap_md5, COUNT(*) AS c FROM {} WHERE completed IN (2, 3) AND play_mode = ? {} GROUP BY beatmap_md5 ORDER BY c DESC",
-            scores_table, mods_query_str,
+            "SELECT s.beatmap_md5, COUNT(*) AS c FROM {} s WHERE s.completed IN (2, 3) AND s.play_mode = ? {} GROUP BY s.beatmap_md5 ORDER BY c DESC",
+            scores_table, score_conditions,
         ))
         .bind(mode)
         .fetch_all(ctx.database.get().await?.deref_mut())
@@ -297,12 +360,12 @@ async fn recalculate_mode_scores(
     for (beatmap_md5,) in beatmap_md5s {
         let semaphore = semaphore.clone();
         let ctx = ctx.clone();
-        let mods_query_str = mods_query_str.clone();
+        let filters = filters.clone();
 
         let permit = semaphore.acquire_owned().await?;
 
         futures.push(tokio::spawn(async move {
-            recalculate_beatmap(beatmap_md5, scores_table, mods_query_str, mode, rx, ctx).await?;
+            recalculate_beatmap(beatmap_md5, scores_table, filters, mode, rx, ctx).await?;
             beatmaps_processed += 1;
 
             drop(permit);
@@ -407,10 +470,7 @@ async fn recalculate_statuses(
     mode: i32,
     rx: i32,
     ctx: Arc<Context>,
-    mods_value: Option<i32>,
-    neq_mods_value: Option<i32>,
-    mapper_filter: Option<String>,
-    map_filter: Option<Vec<i32>>,
+    filters: &DeployFilters,
 ) -> anyhow::Result<()> {
     let scores_table = match rx {
         0 => "scores",
@@ -419,20 +479,14 @@ async fn recalculate_statuses(
         _ => unreachable!(),
     };
 
-    let mods_query_str = if let Some(mods_value) = mods_value {
-        format!("AND (mods & {}) > 0", mods_value)
-    } else if let Some(neq_mods_value) = neq_mods_value {
-        format!("AND (mods & {}) = 0", neq_mods_value)
-    } else {
-        "".to_string()
-    };
+    let score_conditions = filters.score_conditions(Some("s"));
 
-    let beatmap_md5s: Vec<(String,)> = if let Some(mapper_filter) = mapper_filter {
+    let beatmap_md5s: Vec<(String,)> = if let Some(mapper_filter) = &filters.mapper_filter {
         sqlx::query_as(
             &format!(
-                "SELECT DISTINCT beatmap_md5 FROM {} INNER JOIN beatmaps USING(beatmap_md5) 
-                WHERE userid = ? AND completed IN (2, 3) AND play_mode = ? AND beatmaps.file_name LIKE ? {}",
-                scores_table, mods_query_str,
+                "SELECT DISTINCT s.beatmap_md5 FROM {} s INNER JOIN beatmaps b USING(beatmap_md5)
+                WHERE s.userid = ? AND s.completed IN (2, 3) AND s.play_mode = ? AND b.file_name LIKE ? {}",
+                scores_table, score_conditions,
             )
         )
             .bind(user_id)
@@ -440,7 +494,7 @@ async fn recalculate_statuses(
             .bind(format!("%({mapper_filter})%"))
             .fetch_all(ctx.database.get().await?.deref_mut())
             .await?
-    } else if let Some(map_filter) = map_filter {
+    } else if let Some(map_filter) = &filters.map_filter {
         let formatted_beatmap_ids = format!(
             "({})",
             map_filter
@@ -451,9 +505,9 @@ async fn recalculate_statuses(
         );
         sqlx::query_as(
             &format!(
-                "SELECT DISTINCT beatmap_md5 FROM {} INNER JOIN beatmaps USING(beatmap_md5) 
-                WHERE userid = ? AND completed IN (2, 3) AND play_mode = ? AND beatmaps.beatmap_id IN {} {}",
-                scores_table, formatted_beatmap_ids, mods_query_str
+                "SELECT DISTINCT s.beatmap_md5 FROM {} s INNER JOIN beatmaps b USING(beatmap_md5)
+                WHERE s.userid = ? AND s.completed IN (2, 3) AND s.play_mode = ? AND b.beatmap_id IN {} {}",
+                scores_table, formatted_beatmap_ids, score_conditions
             )
         )
             .bind(user_id)
@@ -463,8 +517,8 @@ async fn recalculate_statuses(
     } else {
         sqlx::query_as(
             &format!(
-                "SELECT DISTINCT beatmap_md5 FROM {} WHERE userid = ? AND completed IN (2, 3) AND play_mode = ? {}",
-                scores_table, mods_query_str
+                "SELECT DISTINCT s.beatmap_md5 FROM {} s WHERE s.userid = ? AND s.completed IN (2, 3) AND s.play_mode = ? {}",
+                scores_table, score_conditions
             )
         )
             .bind(user_id)
@@ -485,22 +539,9 @@ async fn recalculate_user(
     mode: i32,
     rx: i32,
     ctx: Arc<Context>,
-    mods_value: Option<i32>,
-    neq_mods_value: Option<i32>,
-    mapper_filter: Option<String>,
-    map_filter: Option<Vec<i32>>,
+    filters: &DeployFilters,
 ) -> anyhow::Result<()> {
-    recalculate_statuses(
-        user_id,
-        mode,
-        rx,
-        ctx.clone(),
-        mods_value,
-        neq_mods_value,
-        mapper_filter,
-        map_filter,
-    )
-    .await?;
+    recalculate_statuses(user_id, mode, rx, ctx.clone(), filters).await?;
 
     let scores_table = match rx {
         0 => "scores",
@@ -635,18 +676,21 @@ async fn recalculate_mode_users(
     mode: i32,
     rx: i32,
     ctx: Arc<Context>,
-    mods_value: Option<i32>,
-    neq_mods_value: Option<i32>,
-    mapper_filter: Option<String>,
-    map_filter: Option<Vec<i32>>,
+    filters: &DeployFilters,
+    affected_user_ids: Option<Vec<i32>>,
 ) -> anyhow::Result<()> {
-    let user_ids: Vec<i32> = sqlx::query_scalar(&format!("SELECT id FROM users"))
-        .fetch_all(ctx.database.get().await?.deref_mut())
-        .await?;
+    let user_ids: Vec<i32> = if let Some(user_ids) = affected_user_ids {
+        user_ids
+    } else {
+        sqlx::query_scalar(&format!("SELECT id FROM users"))
+            .fetch_all(ctx.database.get().await?.deref_mut())
+            .await?
+    };
+    let status_filters = filters.status_filters();
 
     let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_TASKS));
 
-    let mut users_recalculated = 0;
+    let mut users_recalculated = 0usize;
 
     for user_id_chunk in user_ids.chunks(BATCH_SIZE as usize) {
         let mut futures = FuturesUnordered::new();
@@ -654,23 +698,12 @@ async fn recalculate_mode_users(
         for &user_id in user_id_chunk {
             let semaphore = semaphore.clone();
             let ctx = ctx.clone();
-            let mapper_filter = mapper_filter.clone();
-            let map_filter = map_filter.clone();
+            let filters = status_filters.clone();
 
             let permit = semaphore.acquire_owned().await?;
 
             futures.push(tokio::spawn(async move {
-                recalculate_user(
-                    user_id,
-                    mode,
-                    rx,
-                    ctx,
-                    mods_value,
-                    neq_mods_value,
-                    mapper_filter,
-                    map_filter,
-                )
-                .await?;
+                recalculate_user(user_id, mode, rx, ctx, &filters).await?;
                 drop(permit);
                 Ok::<(), anyhow::Error>(())
             }))
@@ -685,10 +718,10 @@ async fn recalculate_mode_users(
             }
         }
 
-        users_recalculated += BATCH_SIZE;
+        users_recalculated += user_id_chunk.len();
 
         log::info!(
-            users_left = user_ids.len() - users_recalculated as usize,
+            users_left = user_ids.len().saturating_sub(users_recalculated),
             mode = mode,
             rx = rx,
             users_recalculated = users_recalculated;
@@ -699,15 +732,103 @@ async fn recalculate_mode_users(
     Ok(())
 }
 
+async fn find_affected_user_ids(
+    mode: i32,
+    rx: i32,
+    ctx: Arc<Context>,
+    filters: &DeployFilters,
+) -> anyhow::Result<Vec<i32>> {
+    let scores_table = match rx {
+        0 => "scores",
+        1 => "scores_relax",
+        2 => "scores_ap",
+        _ => unreachable!(),
+    };
+    let score_conditions = filters.score_conditions(Some("s"));
+
+    let user_ids: Vec<i32> = if let Some(mapper_filter) = &filters.mapper_filter {
+        sqlx::query_scalar(&format!(
+            "SELECT DISTINCT s.userid FROM {} s INNER JOIN beatmaps b USING(beatmap_md5)
+            WHERE s.completed IN (2, 3) AND s.play_mode = ? {} AND b.file_name LIKE ?",
+            scores_table, score_conditions,
+        ))
+        .bind(mode)
+        .bind(format!("%({mapper_filter})%"))
+        .fetch_all(ctx.database.get().await?.deref_mut())
+        .await?
+    } else if let Some(map_filter) = &filters.map_filter {
+        let formatted_beatmap_ids = format!(
+            "({})",
+            map_filter
+                .iter()
+                .map(|map| map.to_string())
+                .collect::<Vec<String>>()
+                .join(",")
+        );
+        sqlx::query_scalar(&format!(
+            "SELECT DISTINCT s.userid FROM {} s INNER JOIN beatmaps b USING(beatmap_md5)
+            WHERE s.completed IN (2, 3) AND s.play_mode = ? {} AND b.beatmap_id IN {}",
+            scores_table, score_conditions, formatted_beatmap_ids
+        ))
+        .bind(mode)
+        .fetch_all(ctx.database.get().await?.deref_mut())
+        .await?
+    } else {
+        sqlx::query_scalar(&format!(
+            "SELECT DISTINCT s.userid FROM {} s
+            WHERE s.completed IN (2, 3) AND s.play_mode = ? {}",
+            scores_table, score_conditions,
+        ))
+        .bind(mode)
+        .fetch_all(ctx.database.get().await?.deref_mut())
+        .await?
+    };
+
+    Ok(user_ids)
+}
+
 struct DeployArgs {
     modes: Vec<i32>,
     relax_bits: Vec<i32>,
     total_pp_only: bool,
     total_pp: bool,
-    mods_filter: Option<i32>,
-    neq_mods_filter: Option<i32>,
-    mapper_filter: Option<String>,
-    map_filter: Option<Vec<i32>>,
+    filters: DeployFilters,
+}
+
+fn deploy_after_time_from_env() -> anyhow::Result<Option<i32>> {
+    let after_time_str = std::env::var("DEPLOY_AFTER_TIME").ok();
+    let after_date_str = std::env::var("DEPLOY_AFTER_DATE").ok();
+
+    if after_time_str.is_some() && after_date_str.is_some() {
+        return Err(anyhow!(
+            "DEPLOY_AFTER_TIME and DEPLOY_AFTER_DATE cannot both be set"
+        ));
+    }
+
+    if let Some(after_time_str) = after_time_str {
+        return after_time_str
+            .trim()
+            .parse::<i32>()
+            .map(Some)
+            .map_err(|_| anyhow!("failed to parse DEPLOY_AFTER_TIME"));
+    }
+
+    if let Some(after_date_str) = after_date_str {
+        let after_date = chrono::NaiveDate::parse_from_str(after_date_str.trim(), "%Y-%m-%d")
+            .map_err(|_| anyhow!("failed to parse DEPLOY_AFTER_DATE as YYYY-MM-DD"))?;
+        let after_time = after_date
+            .and_hms_opt(0, 0, 0)
+            .ok_or_else(|| anyhow!("failed to build DEPLOY_AFTER_DATE timestamp"))?
+            .and_utc()
+            .timestamp();
+        let after_time = after_time
+            .try_into()
+            .map_err(|_| anyhow!("DEPLOY_AFTER_DATE is outside the supported timestamp range"))?;
+
+        return Ok(Some(after_time));
+    }
+
+    Ok(None)
 }
 
 fn deploy_args_from_env() -> anyhow::Result<DeployArgs> {
@@ -719,6 +840,12 @@ fn deploy_args_from_env() -> anyhow::Result<DeployArgs> {
     let neq_mods_filter_str = std::env::var("DEPLOY_NEQ_MODS_FILTER").ok();
     let mapper_filter_str = std::env::var("DEPLOY_MAPPER_FILTER").ok();
     let map_filter_str = std::env::var("DEPLOY_MAP_FILTER").ok();
+    let pp_zero = std::env::var("DEPLOY_PP_ZERO")
+        .unwrap_or_default()
+        .to_lowercase()
+        .trim()
+        == "1";
+    let after_time = deploy_after_time_from_env()?;
 
     Ok(DeployArgs {
         modes: modes_str
@@ -733,18 +860,22 @@ fn deploy_args_from_env() -> anyhow::Result<DeployArgs> {
             .collect::<Vec<_>>(),
         total_pp_only: total_pp_only_str.to_lowercase().trim() == "1",
         total_pp: total_pp_str.to_lowercase().trim() == "1",
-        mods_filter: mods_filter_str
-            .map(|mods| mods.trim().parse::<i32>().expect("failed to parse mods")),
-        neq_mods_filter: neq_mods_filter_str
-            .map(|mods| mods.trim().parse::<i32>().expect("failed to parse mods")),
-        mapper_filter: mapper_filter_str,
-        map_filter: map_filter_str.map(|map_filter| {
-            map_filter
-                .trim()
-                .split(',')
-                .map(|map_filter| map_filter.parse::<i32>().expect("failed to parse map"))
-                .collect::<Vec<_>>()
-        }),
+        filters: DeployFilters {
+            mods_filter: mods_filter_str
+                .map(|mods| mods.trim().parse::<i32>().expect("failed to parse mods")),
+            neq_mods_filter: neq_mods_filter_str
+                .map(|mods| mods.trim().parse::<i32>().expect("failed to parse mods")),
+            mapper_filter: mapper_filter_str,
+            map_filter: map_filter_str.map(|map_filter| {
+                map_filter
+                    .trim()
+                    .split(',')
+                    .map(|map_filter| map_filter.parse::<i32>().expect("failed to parse map"))
+                    .collect::<Vec<_>>()
+            }),
+            pp_zero,
+            after_time,
+        },
     })
 }
 
@@ -910,10 +1041,13 @@ fn deploy_args_from_input() -> anyhow::Result<DeployArgs> {
         relax_bits,
         total_pp_only: total_only,
         total_pp: total,
-        mods_filter: mods_value,
-        neq_mods_filter: neq_mods_value,
-        mapper_filter,
-        map_filter,
+        filters: DeployFilters {
+            mods_filter: mods_value,
+            neq_mods_filter: neq_mods_value,
+            mapper_filter,
+            map_filter,
+            ..Default::default()
+        },
     })
 }
 
@@ -931,6 +1065,7 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
     let deploy_args = retrieve_deploy_args()?;
 
     let context_arc = Arc::new(context);
+    let mut affected_users_by_scope = HashMap::new();
 
     if !deploy_args.total_pp_only {
         for mode in &deploy_args.modes {
@@ -941,28 +1076,34 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
 
             if rx || ap {
                 for rx in &deploy_args.relax_bits {
+                    if deploy_args.filters.score_selection_is_targeted() {
+                        let affected_user_ids = find_affected_user_ids(
+                            mode,
+                            *rx,
+                            context_arc.clone(),
+                            &deploy_args.filters,
+                        )
+                        .await?;
+                        affected_users_by_scope.insert((mode, *rx), affected_user_ids);
+                    }
+
                     recalculate_mode_scores(
                         mode,
                         rx.clone(),
                         context_arc.clone(),
-                        deploy_args.mods_filter,
-                        deploy_args.neq_mods_filter,
-                        deploy_args.mapper_filter.clone(),
-                        deploy_args.map_filter.clone(),
+                        &deploy_args.filters,
                     )
                     .await?;
                 }
             } else {
-                recalculate_mode_scores(
-                    mode,
-                    0,
-                    context_arc.clone(),
-                    deploy_args.mods_filter,
-                    deploy_args.neq_mods_filter,
-                    deploy_args.mapper_filter.clone(),
-                    deploy_args.map_filter.clone(),
-                )
-                .await?;
+                if deploy_args.filters.score_selection_is_targeted() {
+                    let affected_user_ids =
+                        find_affected_user_ids(mode, 0, context_arc.clone(), &deploy_args.filters)
+                            .await?;
+                    affected_users_by_scope.insert((mode, 0), affected_user_ids);
+                }
+
+                recalculate_mode_scores(mode, 0, context_arc.clone(), &deploy_args.filters).await?;
             }
         }
     }
@@ -979,26 +1120,53 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
 
         if rx || ap {
             for rx in &deploy_args.relax_bits {
+                let affected_user_ids = if deploy_args.filters.score_selection_is_targeted() {
+                    if let Some(affected_user_ids) = affected_users_by_scope.get(&(mode, *rx)) {
+                        Some(affected_user_ids.clone())
+                    } else {
+                        Some(
+                            find_affected_user_ids(
+                                mode,
+                                *rx,
+                                context_arc.clone(),
+                                &deploy_args.filters,
+                            )
+                            .await?,
+                        )
+                    }
+                } else {
+                    None
+                };
+
                 recalculate_mode_users(
                     mode,
                     rx.clone(),
                     context_arc.clone(),
-                    deploy_args.mods_filter,
-                    deploy_args.neq_mods_filter,
-                    deploy_args.mapper_filter.clone(),
-                    deploy_args.map_filter.clone(),
+                    &deploy_args.filters,
+                    affected_user_ids,
                 )
                 .await?;
             }
         } else {
+            let affected_user_ids = if deploy_args.filters.score_selection_is_targeted() {
+                if let Some(affected_user_ids) = affected_users_by_scope.get(&(mode, 0)) {
+                    Some(affected_user_ids.clone())
+                } else {
+                    Some(
+                        find_affected_user_ids(mode, 0, context_arc.clone(), &deploy_args.filters)
+                            .await?,
+                    )
+                }
+            } else {
+                None
+            };
+
             recalculate_mode_users(
                 mode,
                 0,
                 context_arc.clone(),
-                deploy_args.mods_filter,
-                deploy_args.neq_mods_filter,
-                deploy_args.mapper_filter.clone(),
-                deploy_args.map_filter.clone(),
+                &deploy_args.filters,
+                affected_user_ids,
             )
             .await?;
         }

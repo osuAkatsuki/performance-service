@@ -14,6 +14,9 @@ MAP_FILTER=""
 MODS_FILTER=""
 NEQ_MODS_FILTER=""
 MAPPER_FILTER=""
+PP_ZERO=0
+AFTER_DATE=""
+AFTER_TIME=""
 EXECUTE=0
 PULL_IMAGE=0
 
@@ -40,6 +43,10 @@ Filters:
   --mods BITMASK          Filter to scores WITH these mods
   --no-mods BITMASK       Filter to scores WITHOUT these mods
   --mapper NAME           Filter by mapper name, fuzzy matched by the service
+  --pp-zero               Only recalculate scores where pp is currently 0
+  --after-date DATE       Only recalculate scores submitted on/after DATE
+                          Format: YYYY-MM-DD, interpreted as UTC midnight
+  --after-time TIMESTAMP  Only recalculate scores submitted on/after a Unix timestamp
 
 Compose/runtime:
   --name NAME             Label used in the log filename
@@ -55,6 +62,7 @@ Examples:
   $0 --name full-recalc --pull --execute
   $0 --name reaggregate-only --total-pp-only --execute
   $0 --name std-dt-only --modes 0 --relax 0,1,2 --mods 64 --execute
+  $0 --name recent-relax-0pp --modes 0,1,2 --relax 1 --pp-zero --after-date 2026-07-01 --execute
 
 Common mod bitmasks:
   8=HD, 16=HR, 64=DT, 256=HT, 1024=FL
@@ -82,6 +90,15 @@ require_int() {
 
   if [[ ! "$value" =~ ^[0-9]+$ ]]; then
     error "${name} must be an integer"
+  fi
+}
+
+require_date() {
+  local name="$1"
+  local value="$2"
+
+  if [[ ! "$value" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+    error "${name} must use YYYY-MM-DD format"
   fi
 }
 
@@ -143,6 +160,20 @@ while [[ $# -gt 0 ]]; do
       MAPPER_FILTER="$2"
       shift 2
       ;;
+    --pp-zero)
+      PP_ZERO=1
+      shift
+      ;;
+    --after-date)
+      require_value "$1" "${2:-}"
+      AFTER_DATE="$2"
+      shift 2
+      ;;
+    --after-time)
+      require_value "$1" "${2:-}"
+      AFTER_TIME="$2"
+      shift 2
+      ;;
     --compose-dir)
       require_value "$1" "${2:-}"
       COMPOSE_DIR="$2"
@@ -191,6 +222,18 @@ if [[ -n "$NEQ_MODS_FILTER" ]]; then
   require_int "--no-mods" "$NEQ_MODS_FILTER"
 fi
 
+if [[ -n "$AFTER_DATE" ]]; then
+  require_date "--after-date" "$AFTER_DATE"
+fi
+
+if [[ -n "$AFTER_TIME" ]]; then
+  require_int "--after-time" "$AFTER_TIME"
+fi
+
+if [[ -n "$AFTER_DATE" && -n "$AFTER_TIME" ]]; then
+  error "--after-date and --after-time cannot both be set"
+fi
+
 cmd=(
   docker compose run --rm --no-deps
   -e APP_COMPONENT=deploy
@@ -215,6 +258,18 @@ fi
 
 if [[ -n "$MAPPER_FILTER" ]]; then
   cmd+=(-e DEPLOY_MAPPER_FILTER="$MAPPER_FILTER")
+fi
+
+if [[ "$PP_ZERO" -eq 1 ]]; then
+  cmd+=(-e DEPLOY_PP_ZERO=1)
+fi
+
+if [[ -n "$AFTER_DATE" ]]; then
+  cmd+=(-e DEPLOY_AFTER_DATE="$AFTER_DATE")
+fi
+
+if [[ -n "$AFTER_TIME" ]]; then
+  cmd+=(-e DEPLOY_AFTER_TIME="$AFTER_TIME")
 fi
 
 cmd+=("$COMPOSE_SERVICE")

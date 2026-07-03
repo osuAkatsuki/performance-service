@@ -74,7 +74,14 @@ scripts/run-compose-recalc.sh --name reaggregate-only --total-pp-only --execute
 
 # Recalculate specific beatmaps.
 scripts/run-compose-recalc.sh --name specific-maps --maps 1808605,1821147,1844776 --modes 0 --relax 0,1 --execute
+
+# Repair recent 0pp relax scores from osu!std, taiko, and catch.
+scripts/run-compose-recalc.sh --name recent-relax-0pp --modes 0,1,2 --relax 1 --pp-zero --after-date 2026-07-01 --execute
 ```
+
+When using `--pp-zero` or `--after-date`, the service captures affected users
+before score PP is updated, then recalculates those users' best-score status,
+total PP, Redis leaderboards, and cached stats after the score repair.
 
 ---
 
@@ -285,6 +292,9 @@ If you know approximately which beatmaps were already processed, you could use `
 | `DEPLOY_NEQ_MODS_FILTER` | Only scores WITHOUT these mods (bitmask) | `64` |
 | `DEPLOY_MAPPER_FILTER` | Filter by mapper name (fuzzy match) | `Sotarks` |
 | `DEPLOY_MAP_FILTER` | Comma-separated beatmap IDs | `75,129891` |
+| `DEPLOY_PP_ZERO` | `1` = only repair scores where `pp = 0` | `1` |
+| `DEPLOY_AFTER_DATE` | Only repair scores submitted on/after a UTC date | `2026-07-01` |
+| `DEPLOY_AFTER_TIME` | Only repair scores submitted on/after a Unix timestamp | `1782864000` |
 
 ## Reference: Mod Bitmasks
 
