@@ -66,6 +66,7 @@ SERVICE_READINESS_TIMEOUT=60
 The `deploy` component recalculates PP for all scores and updates user statistics. This uses the **same PP calculation algorithm** as live score submissions.
 
 > **See [PRACTICAL_RECALC_GUIDE.md](PRACTICAL_RECALC_GUIDE.md) for step-by-step instructions on running a recalculation in production.**
+> On Hetzner, use [`scripts/run-compose-recalc.sh`](scripts/run-compose-recalc.sh) to run the `deploy` component through docker compose.
 
 ### Game Modes
 

@@ -2,29 +2,86 @@
 
 This guide covers how to run a full PP recalculation in production.
 
-## Kubernetes (Recommended)
+## Hetzner Docker Compose (Recommended)
 
-If running in Kubernetes, use the pre-made Job manifests in [`k8s/jobs/`](k8s/jobs/):
+Production Akatsuki services run from the Hetzner docker compose project. Use
+[`scripts/run-compose-recalc.sh`](scripts/run-compose-recalc.sh) to run the
+`deploy` component with the same image, Vault wiring, and network configuration
+as `performance-service-api`.
+
+The helper is dry-run by default. It prints the exact command first; add
+`--execute` after reviewing it.
 
 ```bash
-# Quick start - test with a single beatmap
-kubectl apply -f k8s/jobs/examples/test-single-beatmap.yaml
-kubectl logs -f job/performance-service-deploy-test-single-beatmap
+# SSH into the Hetzner host, then keep the job attached to a durable session.
+ssh hetzner-new
+tmux new -s pp-recalc
 
-# Or generate a custom job
-cd k8s/jobs
-./generate-job.sh --name my-recalc --modes 0,1,2,3 --relax 0,1,2
-kubectl apply -f recalc-job-my-recalc.yaml
-kubectl logs -f job/performance-service-deploy-my-recalc
+# From a performance-service checkout or a copied script:
+scripts/run-compose-recalc.sh --name test-beatmap-75 --maps 75 --modes 0 --relax 0
+scripts/run-compose-recalc.sh --name test-beatmap-75 --maps 75 --modes 0 --relax 0 --execute
 ```
 
-See [`k8s/jobs/README.md`](k8s/jobs/README.md) for full documentation.
+By default the helper uses:
+
+- compose project directory: `/opt/akatsuki`
+- compose service: `performance-service-api`
+- log directory: `/opt/akatsuki/logs`
+
+Override those with `--compose-dir`, `--service`, or `--logs-dir` if the host
+layout changes.
+
+### Direct Compose Command
+
+The helper builds this shape of command:
+
+```bash
+cd /opt/akatsuki
+docker compose run --rm --no-deps \
+  -e APP_COMPONENT=deploy \
+  -e APP_ENV=production \
+  -e DEPLOY_MODES=0 \
+  -e DEPLOY_RELAX_BITS=0 \
+  -e DEPLOY_MAP_FILTER=75 \
+  -e DEPLOY_TOTAL_PP_ONLY=0 \
+  -e DEPLOY_TOTAL_PP=1 \
+  performance-service-api 2>&1 | tee /opt/akatsuki/logs/performance-service-recalc-test.log
+```
+
+`performance-service-api` is used as the base compose service because it already
+points at `ghcr.io/osuakatsuki/performance-service:latest`, sets
+`PULL_SECRETS_FROM_VAULT=1`, and has the `host.docker.internal` mapping needed
+to reach Vault from the container. The `-e APP_COMPONENT=deploy` override makes
+the container run the one-off recalc path instead of the API server.
+
+### Compose Examples
+
+```bash
+# Pull the latest image and run a full server recalculation.
+scripts/run-compose-recalc.sh --name full-recalc --pull --execute
+
+# Recalculate only osu!std, including vanilla, relax, and autopilot.
+scripts/run-compose-recalc.sh --name std-all --modes 0 --relax 0,1,2 --execute
+
+# Recalculate only DT scores.
+scripts/run-compose-recalc.sh --name dt-scores --mods 64 --execute
+
+# Recalculate scores without DT, NC, or HT.
+scripts/run-compose-recalc.sh --name no-speed-mods --no-mods 832 --execute
+
+# Re-aggregate user totals only, using existing score PP values.
+scripts/run-compose-recalc.sh --name reaggregate-only --total-pp-only --execute
+
+# Recalculate specific beatmaps.
+scripts/run-compose-recalc.sh --name specific-maps --maps 1808605,1821147,1844776 --modes 0 --relax 0,1 --execute
+```
 
 ---
 
-## Manual Execution (Non-K8s)
+## Manual Source Execution
 
-For environments without Kubernetes, or for local testing.
+Use this path for local testing or for a host where the compose project is not
+available.
 
 ## Prerequisites
 
@@ -35,7 +92,9 @@ The `deploy` component needs network access to:
 
 ## Where to Run
 
-**Best option:** Run on the same server (or a server in the same network) where `performance-service` API is already running. It uses the same config, so you can reuse the `.env` file.
+**Best option:** Use the compose path above on the same server where
+`performance-service` API is already running. It reuses the production image,
+secrets, and network config.
 
 **Alternatively:** Any server that can reach the database, Redis, and beatmaps-service. Could be a dedicated worker box.
 
@@ -137,7 +196,7 @@ Beatmap recalculation progress: beatmaps_left=12345, mode=0, rx=0, beatmaps_proc
 Processed users: users_left=5000, mode=0, rx=0, users_recalculated=1000
 ```
 
-## Common Scenarios
+## Manual Source Examples
 
 ### Full server recalculation (all modes, all variants)
 
@@ -206,7 +265,8 @@ If you know approximately which beatmaps were already processed, you could use `
 ## Pre-flight Checklist
 
 - [ ] Server has network access to MySQL, Redis, beatmaps-service
-- [ ] `.env` file is configured with correct credentials
+- [ ] `VAULT_TOKEN` is exported if using docker compose
+- [ ] `.env` file is configured with correct credentials if running from source
 - [ ] Running in tmux/screen session
 - [ ] Logging output to a file with `tee`
 - [ ] Running during off-peak hours
