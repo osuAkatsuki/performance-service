@@ -169,31 +169,17 @@ async fn write_score_pp(
 ) -> anyhow::Result<()> {
     let new_pp_for_stats = new_pp as f32;
 
-    if run.dry_run {
+    let rows_affected = if run.dry_run {
         run.record_score_pp(score.id, new_pp_for_stats).await;
-        log::info!(
-            score_id = score.id,
-            user_id = score.user_id,
-            beatmap_md5 = score.beatmap_md5.as_str(),
-            beatmap_id = score.beatmap_id,
-            scores_table = scores_table,
-            mode = score.play_mode,
-            rx = rx,
-            mods = score.mods,
-            old_pp = score.pp,
-            new_pp = new_pp,
-            changed = score.pp != new_pp_for_stats;
-            "Dry run would update score pp",
-        );
-
-        return Ok(());
-    }
-
-    let result = sqlx::query(&format!("UPDATE {} SET pp = ? WHERE id = ?", scores_table))
-        .bind(new_pp)
-        .bind(score.id)
-        .execute(ctx.database.get().await?.deref_mut())
-        .await?;
+        0
+    } else {
+        sqlx::query(&format!("UPDATE {} SET pp = ? WHERE id = ?", scores_table))
+            .bind(new_pp)
+            .bind(score.id)
+            .execute(ctx.database.get().await?.deref_mut())
+            .await?
+            .rows_affected()
+    };
 
     log::info!(
         score_id = score.id,
@@ -207,8 +193,10 @@ async fn write_score_pp(
         old_pp = score.pp,
         new_pp = new_pp,
         changed = score.pp != new_pp_for_stats,
-        rows_affected = result.rows_affected();
-        "Updated score pp",
+        dry_run = run.dry_run,
+        write_skipped = run.dry_run,
+        rows_affected = rows_affected;
+        "Score pp write",
     );
 
     Ok(())
@@ -618,31 +606,19 @@ async fn write_score_completed(
     ctx: Arc<Context>,
     run: &RecalculationRun,
 ) -> anyhow::Result<()> {
-    if run.dry_run {
-        log::info!(
-            score_id = score_id,
-            user_id = user_id,
-            beatmap_md5 = beatmap_md5,
-            scores_table = scores_table,
-            mode = mode,
-            rx = rx,
-            old_completed = old_completed,
-            new_completed = new_completed,
-            changed = old_completed != new_completed;
-            "Dry run would update score status",
-        );
-
-        return Ok(());
-    }
-
-    let result = sqlx::query(&format!(
-        "UPDATE {} SET completed = ? WHERE id = ?",
-        scores_table
-    ))
-    .bind(new_completed)
-    .bind(score_id)
-    .execute(ctx.database.get().await?.deref_mut())
-    .await?;
+    let rows_affected = if run.dry_run {
+        0
+    } else {
+        sqlx::query(&format!(
+            "UPDATE {} SET completed = ? WHERE id = ?",
+            scores_table
+        ))
+        .bind(new_completed)
+        .bind(score_id)
+        .execute(ctx.database.get().await?.deref_mut())
+        .await?
+        .rows_affected()
+    };
 
     log::info!(
         score_id = score_id,
@@ -654,8 +630,10 @@ async fn write_score_completed(
         old_completed = old_completed,
         new_completed = new_completed,
         changed = old_completed != new_completed,
-        rows_affected = result.rows_affected();
-        "Updated score status",
+        dry_run = run.dry_run,
+        write_skipped = run.dry_run,
+        rows_affected = rows_affected;
+        "Score status write",
     );
 
     Ok(())
@@ -838,37 +816,32 @@ async fn recalculate_user(
     let new_pp = calculate_new_pp(&scores, score_count);
 
     let stats_mode = mode + (4 * rx);
-    if run.dry_run {
-        log::info!(
-            user_id = user_id,
-            mode = mode,
-            rx = rx,
-            stats_mode = stats_mode,
-            new_pp = new_pp,
-            score_count = score_count;
-            "Dry run would update user total pp",
-        );
+    let rows_affected = if run.dry_run {
+        0
     } else {
-        let result = sqlx::query(&format!(
+        sqlx::query(&format!(
             "UPDATE user_stats SET pp = ? WHERE user_id = ? AND mode = ?",
         ))
         .bind(new_pp)
         .bind(user_id)
         .bind(stats_mode)
         .execute(ctx.database.get().await?.deref_mut())
-        .await?;
+        .await?
+        .rows_affected()
+    };
 
-        log::info!(
-            user_id = user_id,
-            mode = mode,
-            rx = rx,
-            stats_mode = stats_mode,
-            new_pp = new_pp,
-            score_count = score_count,
-            rows_affected = result.rows_affected();
-            "Updated user total pp",
-        );
-    }
+    log::info!(
+        user_id = user_id,
+        mode = mode,
+        rx = rx,
+        stats_mode = stats_mode,
+        new_pp = new_pp,
+        score_count = score_count,
+        dry_run = run.dry_run,
+        write_skipped = run.dry_run,
+        rows_affected = rows_affected;
+        "User total pp write",
+    );
 
     let (country, user_privileges): (String, i32) =
         sqlx::query_as("SELECT country, privileges FROM users WHERE id = ?")
@@ -925,71 +898,47 @@ async fn recalculate_user(
             country.to_lowercase()
         );
 
-        if run.dry_run {
-            log::info!(
-                user_id = user_id,
-                mode = mode,
-                rx = rx,
-                redis_key = global_key.as_str(),
-                new_pp = new_pp;
-                "Dry run would update Redis leaderboard",
-            );
-            log::info!(
-                user_id = user_id,
-                mode = mode,
-                rx = rx,
-                redis_key = country_key.as_str(),
-                new_pp = new_pp;
-                "Dry run would update Redis leaderboard",
-            );
+        let mut redis_connection = if run.dry_run {
+            None
         } else {
-            let mut redis_connection = ctx.redis.get_multiplexed_async_connection().await?;
+            Some(ctx.redis.get_multiplexed_async_connection().await?)
+        };
 
-            let _: () = redis_connection
-                .zadd(global_key.as_str(), user_id.to_string(), new_pp)
-                .await?;
+        for redis_key in [&global_key, &country_key] {
+            if let Some(redis_connection) = redis_connection.as_mut() {
+                let _: () = redis_connection
+                    .zadd(redis_key.as_str(), user_id.to_string(), new_pp)
+                    .await?;
+            }
+
             log::info!(
                 user_id = user_id,
                 mode = mode,
                 rx = rx,
-                redis_key = global_key.as_str(),
-                new_pp = new_pp;
-                "Updated Redis leaderboard",
-            );
-
-            let _: () = redis_connection
-                .zadd(country_key.as_str(), user_id.to_string(), new_pp)
-                .await?;
-            log::info!(
-                user_id = user_id,
-                mode = mode,
-                rx = rx,
-                redis_key = country_key.as_str(),
-                new_pp = new_pp;
-                "Updated Redis leaderboard",
+                redis_key = redis_key.as_str(),
+                new_pp = new_pp,
+                dry_run = run.dry_run,
+                write_skipped = run.dry_run;
+                "Redis leaderboard write",
             );
         }
     }
 
-    if run.dry_run {
-        log::info!(
-            user_id = user_id,
-            mode = mode,
-            rx = rx;
-            "Dry run would publish cached stats update",
-        );
-    } else {
+    if !run.dry_run {
         let mut redis_connection = ctx.redis.get_multiplexed_async_connection().await?;
         let _: () = redis_connection
             .publish("peppy:update_cached_stats", user_id)
             .await?;
-        log::info!(
-            user_id = user_id,
-            mode = mode,
-            rx = rx;
-            "Published cached stats update",
-        );
     }
+
+    log::info!(
+        user_id = user_id,
+        mode = mode,
+        rx = rx,
+        dry_run = run.dry_run,
+        write_skipped = run.dry_run;
+        "Cached stats publish",
+    );
 
     Ok(())
 }
