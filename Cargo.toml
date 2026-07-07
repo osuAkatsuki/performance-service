@@ -64,4 +64,5 @@ aim-accuracy-fix = { package = "akatsuki-pp", git = "https://github.com/osuAkats
 improved-miss-penalty-and-acc-rework = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "c5cb35b62309c2159a466a6d26addde7acf0c231" }
 everything-at-once = { package = "akatsuki-pp", git = "https://github.com/osuAkatsuki/akatsuki-pp-rs", rev = "6d22dcdcafb70399a5c0380fcad96e3bdd5c4009" }
 kippy-attempt = { package = "akatsuki-pp", git = "https://github.com/kippysevenstars/akatsuki-pp-rs", rev = "001cc6eb920c4945e14b66ca682bfbf8ecedce4b" }
+flygon-rebalance = { package = "akatsuki-pp", git = "https://github.com/miaxaly/akatsuki-pp-rs", rev = "65f7d98bb3031142ffc6cbb2d81ddafea11bc667" }
 md5 = "0.7.0"
