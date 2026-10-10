@@ -3,7 +3,10 @@ use std::{io::Write, ops::DerefMut};
 
 use crate::{
     context::Context,
-    models::{queue::QueueRequest, rework::Rework},
+    models::{
+        queue::QueueRequest,
+        rework::{supports_rework_calculation, Rework},
+    },
     usecases,
 };
 
@@ -55,6 +58,10 @@ pub async fn serve(context: Context) -> anyhow::Result<()> {
     let mut rework_id_str = String::new();
     std::io::stdin().read_line(&mut rework_id_str)?;
     let rework_id = rework_id_str.trim().parse::<i32>()?;
+
+    if !supports_rework_calculation(rework_id) {
+        anyhow::bail!("Unsupported rework ID {}", rework_id);
+    }
 
     print!("\n");
     std::io::stdout().flush()?;

@@ -12,7 +12,7 @@ use crate::{
     context::Context,
     models::{
         queue::QueueRequest,
-        rework::Rework,
+        rework::{supports_rework_calculation, Rework},
         score::{ReworkScore, RippleScore},
         stats::ReworkStats,
     },
@@ -301,7 +301,7 @@ async fn process_scores(
             27 => calculate_improved_miss_penalty_and_acc_rework_pp(score, context.clone()).await?,
             28 => calculate_everything_at_once_pp(score, context.clone()).await?,
             29 => calculate_kippy_attempt_pp(score, context.clone()).await?,
-            _ => unreachable!(),
+            _ => anyhow::bail!("Unsupported rework ID {}", rework.rework_id),
         };
 
         log::info!(
@@ -334,6 +334,29 @@ async fn handle_queue_request(
     context: Arc<Context>,
     delivery_tag: u64,
 ) -> anyhow::Result<()> {
+    if !supports_rework_calculation(request.rework_id) {
+        sqlx::query(
+            "DELETE FROM rework_queue WHERE user_id = ? AND rework_id = ? AND processed_at IS NULL",
+        )
+        .bind(request.user_id)
+        .bind(request.rework_id)
+        .execute(context.database.get().await?.deref_mut())
+        .await?;
+
+        log::warn!(
+            user_id = request.user_id,
+            rework_id = request.rework_id;
+            "Discarding recalculation request for unsupported rework",
+        );
+
+        context
+            .amqp_channel
+            .basic_ack(delivery_tag, BasicAckOptions::default())
+            .await?;
+
+        return Ok(());
+    }
+
     let Some(rework) = usecases::reworks::fetch_one(request.rework_id, context.clone()).await? else {
         anyhow::bail!("failed to find rework");
     };

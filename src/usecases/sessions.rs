@@ -1,7 +1,7 @@
 use crate::context::Context;
 use crate::models::queue::QueueRequest;
 use crate::models::queue::QueueResponse;
-use crate::models::rework::Rework;
+use crate::models::rework::{supports_rework_calculation, Rework};
 use crate::repositories;
 use lapin::{options::BasicPublishOptions, BasicProperties};
 use redis::AsyncCommands;
@@ -67,6 +67,13 @@ pub async fn enqueue(
     rework_id: i32,
     context: Arc<Context>,
 ) -> anyhow::Result<QueueResponse> {
+    if !supports_rework_calculation(rework_id) {
+        return Ok(QueueResponse {
+            success: false,
+            message: Some("This rework does not support recalculation".to_string()),
+        });
+    }
+
     let mut redis_conn = context.redis.get_multiplexed_async_connection().await?;
     let user_id: Option<i32> = redis_conn
         .get(format!("rework:sessions:{}", session_token))
