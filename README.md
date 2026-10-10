@@ -265,6 +265,7 @@ The processor supports the following rework IDs, all for osu!std relax (`mode = 
 | 28 | everything_at_once | All experimental changes combined |
 | 29 | kippy_attempt | Kippy's experimental relax PP formula |
 | 30 | merge_test | Merge Test formula from the `merge-test` rosu-pp fork |
+| 31 | relax_pp_update | Relax calculation from the `relax-pp-update` rosu-pp branch |
 
 Recalculation also requires a matching entry in the `reworks` table. IDs without an implemented calculator are rejected by the API and CLI enqueue paths.
 

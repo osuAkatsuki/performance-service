@@ -2223,7 +2223,8 @@ dependencies = [
  "redis",
  "reqwest",
  "rkyv",
- "rosu-pp",
+ "rosu-pp 4.0.1 (git+https://github.com/infernalfire72/rosu-pp?rev=7bb3268161544c5447e0084703c32c8c6d6c2d0e)",
+ "rosu-pp 4.0.1 (git+https://github.com/infernalfire72/rosu-pp?rev=ab89d750d62a42e47157e4810d576aa5ee915b1b)",
  "serde",
  "serde_json",
  "sqlx",
@@ -2699,9 +2700,9 @@ dependencies = [
 
 [[package]]
 name = "rosu-map"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "21de4f8c5cd2738e1c9a2ed477aad2579dacd5acf3845d80738fcec160d0bd8a"
+checksum = "6b92ea634d8b3eaa4d7fba7bd12045dda1a50ce81401c96af0d9c851b0737544"
 
 [[package]]
 name = "rosu-mods"
@@ -2714,6 +2715,15 @@ name = "rosu-mods"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cc58d42f8f2308b4b241de147827af84179d0a318de250495c7c5e47cb701cd9"
+
+[[package]]
+name = "rosu-pp"
+version = "4.0.1"
+source = "git+https://github.com/infernalfire72/rosu-pp?rev=7bb3268161544c5447e0084703c32c8c6d6c2d0e#7bb3268161544c5447e0084703c32c8c6d6c2d0e"
+dependencies = [
+ "rosu-map",
+ "rosu-mods 0.4.1",
+]
 
 [[package]]
 name = "rosu-pp"
