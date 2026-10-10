@@ -9,5 +9,5 @@ pub struct Rework {
 }
 
 pub fn supports_rework_calculation(rework_id: i32) -> bool {
-    matches!(rework_id, 19 | 21..=30)
+    matches!(rework_id, 19 | 21..=31)
 }

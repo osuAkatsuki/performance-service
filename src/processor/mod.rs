@@ -307,6 +307,31 @@ async fn calculate_merge_test_pp(
     Ok(pp)
 }
 
+async fn calculate_relax_pp_update_pp(
+    score: &RippleScore,
+    context: Arc<Context>,
+) -> anyhow::Result<f32> {
+    let beatmap_bytes =
+        usecases::beatmaps::fetch_beatmap_osu_file(score.beatmap_id, context).await?;
+    let beatmap = relax_pp_update::Beatmap::from_bytes(&beatmap_bytes)?;
+
+    let result = relax_pp_update::osu::OsuPerformance::new(&beatmap)
+        .mods(score.mods as u32)
+        .combo(score.max_combo as u32)
+        .n300(score.count_300 as u32)
+        .n100(score.count_100 as u32)
+        .n50(score.count_50 as u32)
+        .misses(score.count_misses as u32)
+        .calculate()?;
+
+    let mut pp = round(result.pp as f32, 2);
+    if pp.is_infinite() || pp.is_nan() {
+        pp = 0.0;
+    }
+
+    Ok(pp)
+}
+
 async fn process_scores(
     rework: &Rework,
     scores: Vec<RippleScore>,
@@ -327,6 +352,7 @@ async fn process_scores(
             28 => calculate_everything_at_once_pp(score, context.clone()).await?,
             29 => calculate_kippy_attempt_pp(score, context.clone()).await?,
             30 => calculate_merge_test_pp(score, context.clone()).await?,
+            31 => calculate_relax_pp_update_pp(score, context.clone()).await?,
             _ => anyhow::bail!("Unsupported rework ID {}", rework.rework_id),
         };
 
