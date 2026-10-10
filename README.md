@@ -250,6 +250,8 @@ The `mass_recalc` and `processor` components are for testing **experimental PP a
 
 ### Available Reworks
 
+The processor supports the following rework IDs, all for osu!std relax (`mode = 0`, `rx = 1`). The names below identify their calculator implementations in `src/processor/mod.rs`; display names come from the `reworks` database table.
+
 | ID | Name | Description |
 |----|------|-------------|
 | 19 | improved_miss_penalty | Improved miss penalty formula |
@@ -261,6 +263,10 @@ The `mass_recalc` and `processor` components are for testing **experimental PP a
 | 26 | aim_accuracy_fix | Aim and accuracy fixes |
 | 27 | improved_miss_penalty_and_acc_rework | Combined miss penalty + accuracy rework |
 | 28 | everything_at_once | All experimental changes combined |
+| 29 | kippy_attempt | Kippy's experimental relax PP formula |
+| 30 | merge_test | Merge Test formula from the `merge-test` rosu-pp fork |
+
+Recalculation also requires a matching entry in the `reworks` table. IDs without an implemented calculator are rejected by the API and CLI enqueue paths.
 
 ### Running a Rework Recalculation
 
