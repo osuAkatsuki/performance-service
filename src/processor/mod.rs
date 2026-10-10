@@ -316,6 +316,7 @@ async fn calculate_relax_pp_update_pp(
     let beatmap = relax_pp_update::Beatmap::from_bytes(&beatmap_bytes)?;
 
     let result = relax_pp_update::osu::OsuPerformance::new(&beatmap)
+        .lazer(false)
         .mods(score.mods as u32)
         .combo(score.max_combo as u32)
         .n300(score.count_300 as u32)
