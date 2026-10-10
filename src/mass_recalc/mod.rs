@@ -4,7 +4,10 @@ use std::{io::Write, ops::DerefMut};
 
 use crate::{
     context::Context,
-    models::{queue::QueueRequest, rework::Rework},
+    models::{
+        queue::QueueRequest,
+        rework::{supports_rework_calculation, Rework},
+    },
     usecases,
 };
 
@@ -122,6 +125,10 @@ fn retrieve_mass_recalc_args() -> anyhow::Result<MassRecalcArgs> {
 
 pub async fn serve(context: Context) -> anyhow::Result<()> {
     let mass_recalc_args = retrieve_mass_recalc_args()?;
+
+    if !supports_rework_calculation(mass_recalc_args.rework_id) {
+        anyhow::bail!("Unsupported rework ID {}", mass_recalc_args.rework_id);
+    }
 
     log::info!(
         rework_id = mass_recalc_args.rework_id;

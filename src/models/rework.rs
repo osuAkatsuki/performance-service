@@ -7,3 +7,7 @@ pub struct Rework {
     #[serde(with = "chrono::serde::ts_seconds")]
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
+
+pub fn supports_rework_calculation(rework_id: i32) -> bool {
+    matches!(rework_id, 19 | 21..=29)
+}
