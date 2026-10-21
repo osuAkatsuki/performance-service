@@ -61,20 +61,5 @@ pub struct Config {
     pub redis_use_ssl: bool,
 
     #[clap(long, env)]
-    pub aws_access_key_id: String,
-
-    #[clap(long, env)]
-    pub aws_bucket_name: String,
-
-    #[clap(long, env)]
-    pub aws_endpoint_url: String,
-
-    #[clap(long, env)]
-    pub aws_region: String,
-
-    #[clap(long, env)]
-    pub aws_secret_access_key: String,
-
-    #[clap(long, env)]
     pub beatmaps_service_base_url: String,
 }
